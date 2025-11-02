@@ -1,5 +1,4 @@
 use ndarray::s;
-use rand::Rng;
 use super::types::{Matrix, Vector};
 
 

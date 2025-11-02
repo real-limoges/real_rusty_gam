@@ -1,21 +1,18 @@
+#![allow(unused_imports, unused_variables)]
 use super::error::GamError;
 use super::families::Family;
 use super::splines::{create_basis_matrix, create_penalty_matrix, kronecker_product};
 use super::terms::{Term, Smooth};
 use super::types::*;
-use ndarray::{s, stack, Array1, Array2, Axis};
-use ndarray_linalg::{Cholesky, Inverse, Solve, UPLO};
+use ndarray::{s, concatenate, Axis};
 
-use argmin::core::{Cost, Error, Executor};
-use argmin::solver::lbfgs::Lbfgs;
 
-use rand::thread_rng;
-use rand_distr::{Distribution, MvNormal};
+use rand_distr::Distribution;
 
-use polars::chunked_array::ChunkedArray;
 use polars::datatypes::DataType;
-use polars::prelude::{ DataFrame, IntoSeries, NamedFrom, PolarsError, Series};
+use polars::prelude::{ DataFrame, NamedFrom};
 
+// some constants around the PIRLS algorithm
 const MAX_PIRLS_ITER: usize = 25;
 const PIRLS_TOLERANCE: f64 = 1e-6;
 
@@ -30,7 +27,6 @@ pub(crate) fn fit_model<F: Family>(
     terms: &[Term],
     family: &F,
 ) -> Result<(Coefficients, CovarianceMatrix), GamError> {
-
     let n_obs = y.len();
 
     let mut model_matrix_parts = Vec::new();
@@ -40,7 +36,7 @@ pub(crate) fn fit_model<F: Family>(
     for term in terms.iter() {
         match term {
             Term::Intercept => {
-                let part = Array1::ones(n_obs).into_shape((n_obs, 1))?;
+                let part = Vector::ones(n_obs).into_shape((n_obs, 1))?;
                 model_matrix_parts.push(part);
                 total_coeffs += 1;
             }
@@ -52,16 +48,35 @@ pub(crate) fn fit_model<F: Family>(
             }
             Term::Smooth(smooth) => {
                 let (basis, penalties) = assemble_smooth(data, n_obs, smooth)?;
-                let n_coeffs = basis.ncols()
+                let n_coeffs = basis.ncols();
                 model_matrix_parts.push(basis);
 
                 for penalty_block in penalties {
-                    penalty_blocks.push(penalty_block);
+                    penalty_blocks.push((total_coeffs, penalty_block));
                 }
                 total_coeffs += n_coeffs;
             }
         }
     }
+
+    let x_model = ModelMatrix(concatenate(
+        Axis(1),
+        &model_matrix_parts
+            .iter()
+            .map(|m| m.view())
+            .collect::<Vec<_>>(),
+    )?);
+    let penalty_matrices = penalty_blocks
+        .into_iter()
+        .map(|(start_index, block)| {
+            let mut s_j = PenaltyMatrix(Matrix::zeros((total_coeffs, total_coeffs)));
+            let n = block.ncols();
+            s_j.slice_mut(s![start_index..start_index + n, start_index..start_index + n])
+                .assign(&block);
+            s_j
+        })
+        .collect::<Vec<_>>();
+    todo!()
 }
 
 fn get_col_as_f64(data: &DataFrame, name: &str, n_obs: usize) -> Result<Vector, GamError> {
@@ -111,14 +126,15 @@ fn assemble_smooth(data: &DataFrame, n_obs: usize, smooth: &Smooth
 
             let n_coeffs_total = *n_splines_1 * *n_splines_2;
 
-            let mut basis = Matrix::zeroes((n_obs, n_coeffs_total));
+            let mut basis = Matrix::zeros((n_obs, n_coeffs_total));
 
             // send the basis vectors into the blender
             for i in 0..n_obs {
                 let row1 = b1.row(i);
                 let row2 = b2.row(i);
                 let row_out = kronecker_product(
-                    &row1.insert_axis(Axis(0)), &row2.insert_axis(Axis(0))
+                    &row1.insert_axis(Axis(0)).to_owned(),
+                    &row2.insert_axis(Axis(0)).to_owned(),
                 );
                 basis.row_mut(i).assign(&row_out);
             }
@@ -129,7 +145,7 @@ fn assemble_smooth(data: &DataFrame, n_obs: usize, smooth: &Smooth
 
             let penalty_1 = kronecker_product(&s1, &i_k2);
             let penalty_2 = kronecker_product(&i_k1, &s2);
-            Ok((basis, vec![PenaltyMatrix(penalty_1), PenaltyMatrix(penalty_2])]))
+            Ok((basis, vec![PenaltyMatrix(penalty_1), PenaltyMatrix(penalty_2)]))
         },
         Smooth::RandomEffect { col_name } => {
 
