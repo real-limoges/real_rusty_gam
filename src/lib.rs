@@ -25,6 +25,6 @@ impl GeneralizedAdditiveModel {
         terms: &[Term],
         family: &F,
     ) -> Result<Self, GamError> {
-        Ok(())
+        todo!()
     }
 }
