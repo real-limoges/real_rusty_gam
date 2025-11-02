@@ -2,7 +2,6 @@ mod error;
 mod fitting;
 mod splines;
 mod types;
-mod families;
 mod terms;
 
 pub use error::GamError;
