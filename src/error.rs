@@ -30,3 +30,8 @@ impl From<argmin::core::Error> for GamError {
         GamError::Optimization(e.to_string())
     }
 }
+impl From<ShapeError> for GamError {
+    fn from(err: ShapeError) -> Self {
+        GamError::Shape(err.to_string())
+    }
+}

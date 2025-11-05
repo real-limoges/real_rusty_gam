@@ -17,6 +17,9 @@ use rand_distr::Distribution;
 
 use polars::datatypes::DataType;
 use polars::prelude::*;
+use polars::prelude::{CategoricalMapping, FrozenCategories};
+use std::sync::Arc;
+use std::iter;
 
 // some constants around the PIRLS algorithm
 const MAX_PIRLS_ITER: usize = 25;
@@ -40,14 +43,13 @@ pub(crate) fn fit_model<F: Family>(
     for term in terms.iter() {
         match term {
             Term::Intercept => {
-                let part = Vector::ones(n_obs).into_shape_with_order((n_obs, 1))
-                    .map_err(|e| GamError::Shape(e.to_string()))?;
+                let part = Array1::ones(n_obs).into_shape_with_order((n_obs, 1))?;
                 model_matrix_parts.push(part);
                 total_coeffs += 1;
             }
             Term::Linear { col_name } => {
                 let x_col_vec = get_col_as_f64(data, col_name, n_obs)?;
-                let part = x_col_vec.into_shape((n_obs, 1))?;
+                let part = x_col_vec.into_shape_with_order((n_obs, 1))?;
                 model_matrix_parts.push(part);
                 total_coeffs += 1;
             }
@@ -92,7 +94,7 @@ pub(crate) fn fit_model<F: Family>(
 
     let initial_log_lambdas = LogLambdas(Vector::zeros(penalty_matrices.len()));
 
-    // let solver = LBFGS::new(todo!(), todo!());
+    // let solver = LBFGS::new();
 
     let res = Executor::new(cost_function, solver)
         .configure(|state| state.param(initial_log_lambdas).max_iters(100))
@@ -139,11 +141,15 @@ fn get_col_as_f64(data: &DataFrame, name: &str, n_obs: usize) -> Result<Vector, 
         series.clone()
     };
     // todo: open a PR about the private ndarray::error::ShapeError issue
-    let arr = f64_series.f64()?.to_ndarray()?
+    let f64_chunked_array = f64_series.f64()?;
+
+    let ndarray_data = f64_chunked_array.to_ndarray()?;
+    let arr = ndarray_data
         .to_shape(n_obs)
         .map_err(|e| GamError::Shape(e.to_string()))?;
 
-    Ok(Vector::from_vec(arr.to_vec()))
+    Ok(Vector::from(arr.to_vec()))
+
 }
 
 fn assemble_smooth(data: &DataFrame, n_obs: usize, smooth: &Smooth
@@ -201,16 +207,14 @@ fn assemble_smooth(data: &DataFrame, n_obs: usize, smooth: &Smooth
             Ok((basis, vec![PenaltyMatrix(penalty_1), PenaltyMatrix(penalty_2)]))
         },
         Smooth::RandomEffect { col_name } => {
-            let series = data.column(col_name)
-                .map_err(|e| GamError::Input(format!("Column '{}' not found: {}", col_name, e)))?;
-
-            let cat_series = series.cast(&DataType::Categorical(None))?;
-            let id_codes = cat_series.to_physical_repr();
+            let series = data.column(col_name)?;
+            let cat_series = series.categorical()?;
+            let id_codes = cat_series.into_physical();
+            // let id_codes: &UInt32Chunked = id_codes_series.u32()?;
 
             let n_groups = id_codes.n_unique()?;
-
             let mut basis = Matrix::zeros((n_obs, n_groups));
-            let id_col_ndarray = id_codes.u32()?.to_ndarray()?;
+            let id_col_ndarray = id_codes.to_ndarray()?.into_shape_with_order(n_obs)?;
 
             for i in 0..n_obs {
                 let group_id = id_col_ndarray[i] as usize;
@@ -299,12 +303,12 @@ fn run_pirls<F: Family>(
 
     let (n_obs, n_coeffs) = x_matrix.dim();
 
-    let mut s_lambda = Matrix::zeros((n_obs, n_coeffs));
+    let mut s_lambda = Matrix::zeros((n_coeffs, n_coeffs));
     for (i, s_j) in penalty_matrices.iter().enumerate() {
         s_lambda.scaled_add(lambdas[i], s_j);
     }
 
-    let mut beta = Coefficients(Array1::zeros(n_obs));
+    let mut beta = Coefficients(Array1::zeros(n_coeffs));
     let y_mean = y_vector.mean().unwrap_or(0.5).max(0.01);
 
     let mut eta = Array1::from_elem(n_obs, family.link().link(y_mean));
@@ -315,7 +319,7 @@ fn run_pirls<F: Family>(
     for _iter in 0..MAX_PIRLS_ITER {
         let mu = eta.mapv(|e| family.link().inv_link(e));
         for i in 0..n_obs {
-            let (z_i, w_ii) = family.working_response_and_weights(y_vector[i], eta[i], mu[i], );
+            let (z_i, w_ii) = family.working_response_and_weights(y_vector[i], eta[i], mu[i]);
             z[i] = z_i;
             w_diag[i] = w_ii;
         }
