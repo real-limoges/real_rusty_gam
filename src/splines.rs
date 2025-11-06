@@ -5,7 +5,7 @@ use ndarray::{s, Array1, Array2};
 pub fn create_basis_matrix(x: &Array1<f64>, n_splines: usize, degree: usize) -> Array2<f64> {
     let n_obs = x.len();
     let knots = select_knots(x, n_splines, degree);
-    
+
     let mut basis_matrix = Array2::<f64>::zeros((n_obs, n_splines));
 
     for (i, &x_i) in x.iter().enumerate() {
@@ -133,5 +133,6 @@ pub fn kronecker_product(a: &Array2<f64>, b: &Array2<f64>) -> Array2<f64> {
             block.assign(&(b*a_scalar));
         }
     }
+
     c
 }

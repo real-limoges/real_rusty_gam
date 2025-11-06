@@ -5,7 +5,7 @@ use polars::prelude::PolarsError;
 // I've only written web stuff in Rust, so it had a different pattern
 // I kind of like the other pattern beter....
 #[derive(Debug, Error)]
-pub enum GamError {
+pub enum GamlssError {
     #[error("Optimization failed: {0}")]
     Optimization(String),
 
@@ -28,13 +28,13 @@ pub enum GamError {
     ComputationError(String),
 }
 
-impl From<argmin::core::Error> for GamError {
+impl From<argmin::core::Error> for GamlssError {
     fn from(e: argmin::core::Error) -> Self {
-        GamError::Optimization(e.to_string())
+        GamlssError::Optimization(e.to_string())
     }
 }
-impl From<ShapeError> for GamError {
+impl From<ShapeError> for GamlssError {
     fn from(err: ShapeError) -> Self {
-        GamError::Shape(err.to_string())
+        GamlssError::Shape(err.to_string())
     }
 }
