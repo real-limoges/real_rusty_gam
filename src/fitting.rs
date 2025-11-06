@@ -1,23 +1,22 @@
 #![allow(unused_imports, unused_variables)]
 
-use argmin::core::{Error, Executor, Gradient};
+use rand::rand_core;
+use rand::rng;
+use argmin::core::{CostFunction, Error, Executor, Gradient};
 use argmin::solver::quasinewton::LBFGS;
+use argmin::solver::linesearch::MoreThuenteLineSearch;
 use super::error::GamError;
 use super::families;
 use super::families::{Family, Link};
 use super::splines::{create_basis_matrix, create_penalty_matrix, kronecker_product};
 use super::terms::{Term, Smooth};
 use super::types::*;
-use ndarray::{s, concatenate, Axis, Array1, Array2};
-use ndarray_linalg::Inverse;
-use ndarray_linalg::Solve;
-use argmin::core::CostFunction;
-use ndarray::ShapeError;
-use rand_distr::Distribution;
-
+use ndarray::{s, concatenate, Axis, Array1, Array2, ShapeError};
+use ndarray_linalg::{Cholesky, Inverse, Lapack, Solve, UPLO};
+use rand_distr::{Distribution, StandardNormal};
+use rand::Rng;
 use polars::datatypes::DataType;
 use polars::prelude::*;
-use polars::prelude::{CategoricalMapping, FrozenCategories};
 use std::sync::Arc;
 use std::iter;
 
@@ -28,7 +27,7 @@ const PIRLS_TOLERANCE: f64 = 1e-6;
 
 // Here's the good stuff
 
-pub(crate) fn fit_model<F: Family>(
+pub(crate) fn fit_model<F: Family + 'static>(
     data: &DataFrame,
     y: &Vector,
     terms: &[Term],
@@ -43,13 +42,15 @@ pub(crate) fn fit_model<F: Family>(
     for term in terms.iter() {
         match term {
             Term::Intercept => {
-                let part = Array1::ones(n_obs).into_shape_with_order((n_obs, 1))?;
+                let part = Array1::ones(n_obs).into_shape((n_obs, 1))
+                    .map_err(|err| GamError::ComputationError(err.to_string()))?;
                 model_matrix_parts.push(part);
                 total_coeffs += 1;
             }
             Term::Linear { col_name } => {
                 let x_col_vec = get_col_as_f64(data, col_name, n_obs)?;
-                let part = x_col_vec.into_shape_with_order((n_obs, 1))?;
+                let part = x_col_vec.into_shape((n_obs, 1))
+                    .map_err(|err| GamError::ComputationError(err.to_string()))?;
                 model_matrix_parts.push(part);
                 total_coeffs += 1;
             }
@@ -93,8 +94,9 @@ pub(crate) fn fit_model<F: Family>(
     };
 
     let initial_log_lambdas = LogLambdas(Vector::zeros(penalty_matrices.len()));
-
-    // let solver = LBFGS::new();
+    let linesearch = MoreThuenteLineSearch::new();
+    let m = 7;
+    let solver = LBFGS::new(linesearch, m);
 
     let res = Executor::new(cost_function, solver)
         .configure(|state| state.param(initial_log_lambdas).max_iters(100))
@@ -125,7 +127,6 @@ pub(crate) fn fit_model<F: Family>(
     } else {
         1.0
     };
-
     let v_beta = CovarianceMatrix(v_beta_unscaled.0 * phi);
 
     Ok((beta, v_beta))
@@ -209,12 +210,16 @@ fn assemble_smooth(data: &DataFrame, n_obs: usize, smooth: &Smooth
         Smooth::RandomEffect { col_name } => {
             let series = data.column(col_name)?;
             let cat_series = series.categorical()?;
-            let id_codes = cat_series.into_physical();
-            // let id_codes: &UInt32Chunked = id_codes_series.u32()?;
+            let id_codes = cat_series.physical();
 
             let n_groups = id_codes.n_unique()?;
             let mut basis = Matrix::zeros((n_obs, n_groups));
-            let id_col_ndarray = id_codes.to_ndarray()?.into_shape_with_order(n_obs)?;
+
+            let id_col_ndarray = id_codes.to_ndarray()?
+                .into_shape_with_order(n_obs)
+                .map_err(|err| {
+                    GamError::ComputationError(err.to_string())
+                })?;
 
             for i in 0..n_obs {
                 let group_id = id_col_ndarray[i] as usize;
@@ -268,7 +273,8 @@ impl<'a, F: Family> CostFunction for GamCost<'a, F> {
         Ok(gcv_score)
     }
 }
-impl<'a, F: families::Family> Gradient for GamCost<'a, F> {
+
+impl<'a, F: Family> Gradient for GamCost<'a, F> {
     type Param = LogLambdas;
     type Gradient = LogLambdas;
     fn gradient(&self, param: &Self::Param) -> Result<Self::Param, Error> {
@@ -289,8 +295,8 @@ impl<'a, F: families::Family> Gradient for GamCost<'a, F> {
         }
         Ok(LogLambdas(grad_vec))
     }
-
 }
+//
 
 fn run_pirls<F: Family>(
     x_matrix: &Matrix,
@@ -340,9 +346,42 @@ fn run_pirls<F: Family>(
 
             return Ok((new_beta, w_diag, v_beta_unscaled, edf));
         }
-
         beta = new_beta;
         eta = x_matrix.dot(&beta.0);
     }
     Err(GamError::Convergence(MAX_PIRLS_ITER))
+}
+
+pub(crate) fn sample_posterior(
+    beta_hat: &Coefficients,
+    v_beta: &CovarianceMatrix,
+    n_samples: usize,
+) -> Vec<Vector> {
+
+    let l_factor = match &v_beta.0.cholesky(UPLO::Lower) {
+        Ok(cholesky) => cholesky,
+        Err(_) => return vec![],
+    };
+
+    let mut rng_rs = rng();
+
+    sample_from_cholesky(&beta_hat.0, &v_beta.0, n_samples, &mut rng_rs)
+}
+
+
+pub(crate) fn sample_from_cholesky(
+    mean: &Array1<f64>,
+    l_factor: &Array2<f64>,
+    n_samples: usize,
+    rng: &mut (impl Rng + rand_core::RngCore + rand_core::RngCore + rand_core::RngCore)
+) -> Vec<Array1<f64>> {
+
+    let dim = mean.len();
+
+    (0..n_samples)
+        .map(|_| {
+            let z = Array1::from_shape_fn(dim, |_| StandardNormal.sample(rng));
+            mean + l_factor.dot(&z)
+        })
+        .collect()
 }

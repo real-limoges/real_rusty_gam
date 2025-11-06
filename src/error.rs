@@ -23,6 +23,9 @@ pub enum GamError {
 
     #[error("Polars error: {0}")]
     Polars(#[from] PolarsError),
+
+    #[error("ShapeError (Private): {0}")]
+    ComputationError(String),
 }
 
 impl From<argmin::core::Error> for GamError {

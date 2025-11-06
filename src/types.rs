@@ -1,8 +1,9 @@
+use argmin_math::ArgminScaledSub;
 use ndarray::{Array1, Array2};
+use ndarray::prelude::*;
 use std::ops::{Add, Deref, DerefMut, Sub};
 use argmin::core::ArgminError;
-use argmin_math::{ArgminAdd, ArgminSub, ArgminDot, ArgminScaledAdd, ArgminScaledSub, ArgminL1Norm};
-
+use argmin_math::{ArgminAdd, ArgminSub, ArgminMul, ArgminL1Norm, ArgminL2Norm, ArgminMinMax, ArgminSignum, ArgminZeroLike, ArgminDot, ArgminScaledAdd};
 // ----- Mnemonics because the ndarray names stink
 pub type Vector = Array1<f64>;
 pub type Matrix = Array2<f64>;
@@ -11,8 +12,118 @@ pub type Matrix = Array2<f64>;
 #[derive(Debug, Clone)]
 pub struct Coefficients(pub Vector);
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct LogLambdas(pub Vector);
+
+macro_rules! impl_argmin_math_for_vector_wrapper {
+    ($t:ty) => {
+        impl ArgminAdd<Self, Self> for $t {
+            fn add(&self, other: &Self) -> Self {
+                Self(&self.0 + &other.0)
+            }
+        }
+
+        impl ArgminSub<Self, Self> for $t {
+            fn sub(&self, other: &Self) -> Self {
+                Self(&self.0 - &other.0)
+            }
+        }
+
+        impl ArgminMul<f64, Self> for $t {
+            fn mul(&self, scalar: &f64) -> Self {
+                Self(&self.0 * *scalar)
+            }
+        }
+
+        impl ArgminDot<Self, f64> for $t {
+            fn dot(&self, other: &Self) -> f64 {
+                self.0.dot(&other.0)
+            }
+        }
+
+        impl ArgminL1Norm<f64> for $t {
+            fn l1_norm(&self) -> f64 {
+                self.0.mapv(|x| x.abs()).sum()
+            }
+        }
+
+        impl ArgminL2Norm<f64> for $t {
+            fn l2_norm(&self) -> f64 {
+                self.0.mapv(|x| x * x).sum().sqrt()
+            }
+        }
+
+        impl ArgminSignum for $t {
+            fn signum(self) -> Self {
+                Self(self.0.mapv(|x| x.signum()))
+            }
+        }
+
+        impl ArgminMinMax for $t {
+            fn min(x: &Self, y: &Self) -> Self {
+                Self(ndarray::Zip::from(&x.0).and(&y.0).map_collect(|a, b| a.min(*b)))
+            }
+
+            fn max(x: &Self, y: &Self) -> Self {
+                Self(ndarray::Zip::from(&x.0).and(&y.0).map_collect(|a, b| a.max(*b)))
+            }
+        }
+
+        impl ArgminZeroLike for $t {
+            fn zero_like(&self) -> Self {
+                Self(Array1::zeros(self.0.len()))
+            }
+        }
+
+        impl ArgminScaledAdd<Self, f64, Self> for $t {
+            fn scaled_add(&self, alpha: &f64, y: &Self) -> Self {
+                Self(&self.0 + &(y.0.mapv(|yi| yi * alpha)))
+            }
+        }
+
+        impl ArgminScaledSub<Self, f64, Self> for $t {
+            fn scaled_sub(&self, alpha: &f64, y: &Self) -> Self {
+                Self(&self.0 - &(y.0.mapv(|yi| yi * alpha)))
+            }
+        }
+        impl ArgminAdd<f64, $t> for $t {
+            fn add(&self, scalar: &f64) -> $t {
+                Self(self.0.mapv(|a| a + scalar))
+            }
+        }
+
+        impl ArgminSub<f64, $t> for $t {
+            fn sub(&self, scalar: &f64) -> $t {
+                Self(self.0.mapv(|a| a - scalar))
+            }
+        }
+
+        impl ArgminMul<Self, Self> for $t {
+            fn mul(&self, other: &Self) -> Self {
+                // ndarray's * operator on two arrays is element-wise
+                Self(&self.0 * &other.0)
+            }
+        }
+
+        impl Deref for $t {
+            type Target = Vector;
+            fn deref(&self) -> &Self::Target {
+                &self.0
+            }
+        }
+
+        impl DerefMut for $t {
+            fn deref_mut(&mut self) -> &mut Self::Target {
+                &mut self.0
+            }
+        }
+    };
+}
+
+
+impl_argmin_math_for_vector_wrapper!(Coefficients);
+impl_argmin_math_for_vector_wrapper!(LogLambdas);
+
 
 // ----- Newtypes for Safety (Matrices)
 #[derive(Debug, Clone)]
@@ -26,49 +137,30 @@ pub struct CovarianceMatrix(pub Matrix);
 
 
 // ----- Impls for LogLambdas (I need to do a bunch of them for argmin_math)
-impl Deref for LogLambdas {
-    type Target = Vector;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-impl DerefMut for LogLambdas {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
+// impl Deref for LogLambdas {
+//     type Target = Vector;
+//     fn deref(&self) -> &Self::Target {
+//         &self.0
+//     }
+// }
+// impl DerefMut for LogLambdas {
+//     fn deref_mut(&mut self) -> &mut Self::Target {
+//         &mut self.0
+//     }
+// }
 
-impl ArgminSub<LogLambdas, LogLambdas> for LogLambdas {
-    fn sub(&self, other: &LogLambdas) -> LogLambdas { LogLambdas((&self.0).sub(&other.0)) }
-}
-impl ArgminAdd<LogLambdas, LogLambdas> for LogLambdas {
-    fn add(&self, other: &LogLambdas) -> LogLambdas { LogLambdas((&self.0).add(&other.0)) }
-}
-impl ArgminDot<LogLambdas, f64> for LogLambdas {
-    fn dot(&self, other: &LogLambdas) -> f64 { (&self.0).dot(&other.0) }
-}
-impl ArgminScaledAdd<LogLambdas, f64, LogLambdas> for LogLambdas {
-    fn scaled_add(&self, scalar: &f64, other: &LogLambdas) -> LogLambdas {
-        LogLambdas(&self.0 + (*scalar * &other.0))
-    }
-}
-impl ArgminScaledSub<LogLambdas, f64, LogLambdas> for LogLambdas {
-    fn scaled_sub(&self, scalar: &f64, other: &LogLambdas) -> LogLambdas {
-        LogLambdas(&self.0 - (*scalar * &other.0))
-    }
-}
 // ----- Impls for everything else
-impl Deref for Coefficients {
-    type Target = Vector;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-impl DerefMut for Coefficients {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
+// impl Deref for Coefficients {
+//     type Target = Vector;
+//     fn deref(&self) -> &Self::Target {
+//         &self.0
+//     }
+// }
+// impl DerefMut for Coefficients {
+//     fn deref_mut(&mut self) -> &mut Self::Target {
+//         &mut self.0
+//     }
+// }
 
 
 
