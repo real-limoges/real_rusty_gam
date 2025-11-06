@@ -253,7 +253,7 @@ impl<'a, F: Family> CostFunction for GamCost<'a, F> {
             self.family,
             self.penalty_matrices,
             &lambdas,
-        ).map_err(|e| Error::new(e))?;
+        ).map_err(Error::new)?;
 
         let n = self.y_vector.len() as f64;
         let eta = self.x_matrix.dot(&beta.0);
@@ -302,7 +302,7 @@ fn run_pirls<F: Family>(
     x_matrix: &Matrix,
     y_vector: &Vector,
     family: &F,
-    penalty_matrices: &Vec<PenaltyMatrix>,
+    penalty_matrices: &[PenaltyMatrix],
     lambdas: &Vector
 ) -> Result<(Coefficients, Vector, CovarianceMatrix, f64), GamError> {
     // lifted some pirls code out of a numerical analysis book
@@ -373,7 +373,7 @@ pub(crate) fn sample_from_cholesky(
     mean: &Array1<f64>,
     l_factor: &Array2<f64>,
     n_samples: usize,
-    rng: &mut (impl Rng + rand_core::RngCore + rand_core::RngCore + rand_core::RngCore)
+    rng: &mut impl Rng
 ) -> Vec<Array1<f64>> {
 
     let dim = mean.len();
