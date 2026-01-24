@@ -56,7 +56,7 @@ impl GamlssModel {
             .to_shape(y_series.len())
             .map_err(|e| GamlssError::Shape(e.to_string()))?;
 
-        let y_vector = Array1::from_vec(y_vec.to_vec());
+        let y_vector = y_vec.to_owned();
 
         let (fitted_models, diagnostics) =
             fitting::fit_gamlss(data, &y_vector, formula, family, &config)?;
@@ -84,15 +84,10 @@ impl GamlssModel {
         let mut predictions = HashMap::new();
 
         for (param_name, fitted_param) in &self.models {
-            // Reconstruct design matrix for new data using stored terms
             let (x_matrix, _, _) = assemble_model_matrices(new_data, n_obs, &fitted_param.terms)?;
-
-            // Compute linear predictor: eta = X * beta
             let eta = x_matrix.0.dot(&fitted_param.coefficients.0);
-
-            // Get link function and apply inverse to get fitted values
             let link = family.default_link(param_name)?;
-            let fitted: Array1<f64> = eta.iter().map(|&e| link.inv_link(e)).collect();
+            let fitted = eta.mapv(|e| link.inv_link(e));
 
             predictions.insert(param_name.clone(), fitted);
         }
@@ -114,14 +109,9 @@ impl GamlssModel {
         let mut results = HashMap::new();
 
         for (param_name, fitted_param) in &self.models {
-            // Reconstruct design matrix for new data
             let (x_matrix, _, _) = assemble_model_matrices(new_data, n_obs, &fitted_param.terms)?;
-
-            // Compute linear predictor: eta = X * beta
             let eta = x_matrix.0.dot(&fitted_param.coefficients.0);
 
-            // Compute standard errors: se_i = sqrt(x_i' * V * x_i)
-            // where x_i is the i-th row of X and V is the covariance matrix
             let v = &fitted_param.covariance.0;
             let mut se_eta = Array1::zeros(n_obs);
             for i in 0..n_obs {
@@ -131,9 +121,8 @@ impl GamlssModel {
                 se_eta[i] = var_eta_i.max(0.0).sqrt();
             }
 
-            // Get link function and apply inverse to get fitted values
             let link = family.default_link(param_name)?;
-            let fitted: Array1<f64> = eta.iter().map(|&e| link.inv_link(e)).collect();
+            let fitted = eta.mapv(|e| link.inv_link(e));
 
             results.insert(
                 param_name.clone(),
@@ -182,25 +171,21 @@ impl GamlssModel {
         let mut results = HashMap::new();
 
         for (param_name, fitted_param) in &self.models {
-            // Reconstruct design matrix for new data
             let (x_matrix, _, _) = assemble_model_matrices(new_data, n_obs, &fitted_param.terms)?;
 
-            // Get posterior samples for this parameter
             let beta_samples = fitting::sample_posterior(
                 &fitted_param.coefficients,
                 &fitted_param.covariance,
                 n_samples,
             );
 
-            // Get link function
             let link = family.default_link(param_name)?;
 
-            // For each posterior sample, compute predictions
             let prediction_samples: Vec<Array1<f64>> = beta_samples
                 .iter()
                 .map(|beta| {
                     let eta = x_matrix.0.dot(beta);
-                    eta.iter().map(|&e| link.inv_link(e)).collect()
+                    eta.mapv(|e| link.inv_link(e))
                 })
                 .collect();
 
