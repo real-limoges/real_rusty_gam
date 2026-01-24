@@ -2,10 +2,9 @@ use super::{GamlssError, PenaltyMatrix, Smooth, Term};
 use crate::splines::{create_basis_matrix, create_penalty_matrix, kronecker_product};
 use crate::ModelMatrix;
 use ndarray::concatenate;
-use ndarray::{s, stack, Array1, Array2, Axis};
-use polars::chunked_array::ChunkedArray;
+use ndarray::{s, Array1, Array2, Axis};
 use polars::prelude::ChunkUnique;
-use polars::prelude::{DataFrame, DataType, IntoSeries, NamedFrom, PolarsError, Series};
+use polars::prelude::{DataFrame, DataType};
 
 fn get_col_as_f64(data: &DataFrame, name: &str, n_obs: usize) -> Result<Array1<f64>, GamlssError> {
     let series = data

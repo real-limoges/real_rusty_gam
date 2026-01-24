@@ -10,7 +10,7 @@ use super::distributions::{Distribution, Link};
 use super::error::GamlssError;
 use super::terms::{Smooth, Term};
 use super::types::*;
-use ndarray::{Array1, Array2};
+use ndarray::Array1;
 use polars::prelude::DataFrame;
 use std::collections::HashMap;
 
