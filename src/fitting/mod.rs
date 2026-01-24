@@ -1,6 +1,6 @@
 pub mod assembler;
 pub mod inference;
-pub mod solver;
+mod solver;
 
 use self::assembler::assemble_model_matrices;
 pub use self::inference::sample_posterior;
