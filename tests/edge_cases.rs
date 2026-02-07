@@ -5,7 +5,7 @@ use gamlss_rs::{
     distributions::{Beta, Binomial, Gamma, Gaussian, NegativeBinomial, Poisson, StudentT},
     GamlssModel, Smooth, Term,
 };
-use polars::prelude::*;
+use ndarray::Array1;
 use rand::Rng;
 use std::collections::HashMap;
 
@@ -27,7 +27,7 @@ fn test_poisson_with_smooth() {
 
     let n = 300;
     let x: Vec<f64> = (0..n).map(|i| i as f64 / n as f64 * 4.0).collect();
-    let y: Vec<f64> = x
+    let y_vec: Vec<f64> = x
         .iter()
         .map(|&xi| {
             let mu = (1.0 + 0.5 * xi.sin()).exp();
@@ -36,7 +36,9 @@ fn test_poisson_with_smooth() {
         })
         .collect();
 
-    let df = df!("x" => x, "y" => y).unwrap();
+    let y = Array1::from_vec(y_vec);
+    let mut data = HashMap::new();
+    data.insert("x".to_string(), Array1::from_vec(x));
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -49,7 +51,7 @@ fn test_poisson_with_smooth() {
         })],
     );
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Poisson::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Poisson::new()).unwrap();
 
     let edf = model.models["mu"].edf;
     assert!(edf > 2.0, "EDF too low for nonlinear Poisson: {}", edf);
@@ -62,7 +64,7 @@ fn test_student_t_linear() {
 
     let n = 200;
     let x: Vec<f64> = (0..n).map(|i| i as f64 / n as f64).collect();
-    let y: Vec<f64> = x
+    let y_vec: Vec<f64> = x
         .iter()
         .map(|&xi| {
             let mu = 5.0 + 2.0 * xi;
@@ -71,7 +73,9 @@ fn test_student_t_linear() {
         })
         .collect();
 
-    let df = df!("x" => x, "y" => y).unwrap();
+    let y = Array1::from_vec(y_vec);
+    let mut data = HashMap::new();
+    data.insert("x".to_string(), Array1::from_vec(x));
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -86,7 +90,7 @@ fn test_student_t_linear() {
     formula.insert("sigma".to_string(), vec![Term::Intercept]);
     formula.insert("nu".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &StudentT::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &StudentT::new()).unwrap();
 
     let mu_coeffs = &model.models["mu"].coefficients;
     assert!(
@@ -104,7 +108,7 @@ fn test_student_t_linear() {
 #[test]
 fn test_different_spline_configs() {
     let mut rng = Generator::new(999);
-    let df = rng.linear_gaussian(200, 1.0, 5.0, 1.0);
+    let (y, data) = rng.linear_gaussian(200, 1.0, 5.0, 1.0);
 
     for n_splines in [5, 10, 20] {
         let mut formula = HashMap::new();
@@ -119,7 +123,7 @@ fn test_different_spline_configs() {
         );
         formula.insert("sigma".to_string(), vec![Term::Intercept]);
 
-        let model = GamlssModel::fit(&df, "y", &formula, &Gaussian::new());
+        let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new());
         assert!(model.is_ok(), "Failed with n_splines={}", n_splines);
     }
 }
@@ -132,12 +136,14 @@ fn test_penalty_order_1_vs_2() {
     let x: Vec<f64> = (0..n)
         .map(|i| i as f64 / n as f64 * 2.0 * std::f64::consts::PI)
         .collect();
-    let y: Vec<f64> = x
+    let y_vec: Vec<f64> = x
         .iter()
         .map(|&xi| xi.sin() + rng.rng.random_range(-0.1..0.1))
         .collect();
 
-    let df = df!("x" => x, "y" => y).unwrap();
+    let y = Array1::from_vec(y_vec);
+    let mut data = HashMap::new();
+    data.insert("x".to_string(), Array1::from_vec(x));
 
     // penalizes first differences
     let mut formula1 = HashMap::new();
@@ -165,8 +171,8 @@ fn test_penalty_order_1_vs_2() {
     );
     formula2.insert("sigma".to_string(), vec![Term::Intercept]);
 
-    let model1 = GamlssModel::fit(&df, "y", &formula1, &Gaussian::new()).unwrap();
-    let model2 = GamlssModel::fit(&df, "y", &formula2, &Gaussian::new()).unwrap();
+    let model1 = GamlssModel::fit(&y, &data, &formula1, &Gaussian::new()).unwrap();
+    let model2 = GamlssModel::fit(&y, &data, &formula2, &Gaussian::new()).unwrap();
 
     assert!(model1.models["mu"].edf > 2.0);
     assert!(model2.models["mu"].edf > 2.0);
@@ -178,7 +184,7 @@ fn test_very_noisy_data() {
 
     let n = 500;
     let x: Vec<f64> = (0..n).map(|i| i as f64 / n as f64).collect();
-    let y: Vec<f64> = x
+    let y_vec: Vec<f64> = x
         .iter()
         .map(|&xi| {
             let mu = 1.0 + 2.0 * xi;
@@ -186,7 +192,9 @@ fn test_very_noisy_data() {
         })
         .collect();
 
-    let df = df!("x" => x, "y" => y).unwrap();
+    let y = Array1::from_vec(y_vec);
+    let mut data = HashMap::new();
+    data.insert("x".to_string(), Array1::from_vec(x));
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -200,7 +208,7 @@ fn test_very_noisy_data() {
     );
     formula.insert("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Gaussian::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
     // Should still recover approximate slope despite noise
     let slope = model.models["mu"].coefficients[1];
@@ -214,11 +222,12 @@ fn test_very_noisy_data() {
 #[test]
 fn test_perfect_linear_fit() {
     // perfect linear relationship
-    let df = df!(
-        "x" => [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
-        "y" => [0.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0]
-    )
-    .unwrap();
+    let y = Array1::from_vec(vec![0.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0]);
+    let mut data = HashMap::new();
+    data.insert(
+        "x".to_string(),
+        Array1::from_vec(vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]),
+    );
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -232,7 +241,7 @@ fn test_perfect_linear_fit() {
     );
     formula.insert("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Gaussian::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
     let coeffs = &model.models["mu"].coefficients;
     assert!(
@@ -250,7 +259,7 @@ fn test_perfect_linear_fit() {
 #[test]
 fn test_lambdas_positive() {
     let mut rng = Generator::new(42);
-    let df = rng.linear_gaussian(200, 1.0, 5.0, 1.0);
+    let (y, data) = rng.linear_gaussian(200, 1.0, 5.0, 1.0);
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -264,7 +273,7 @@ fn test_lambdas_positive() {
     );
     formula.insert("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Gaussian::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
     // Smoothing parameters should be positive
     for &lambda in model.models["mu"].lambdas.iter() {
@@ -275,7 +284,7 @@ fn test_lambdas_positive() {
 #[test]
 fn test_covariance_symmetric() {
     let mut rng = Generator::new(42);
-    let df = rng.linear_gaussian(100, 1.0, 5.0, 1.0);
+    let (y, data) = rng.linear_gaussian(100, 1.0, 5.0, 1.0);
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -289,7 +298,7 @@ fn test_covariance_symmetric() {
     );
     formula.insert("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Gaussian::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
     let cov = &model.models["mu"].covariance.0;
     let (n, m) = cov.dim();
@@ -307,7 +316,7 @@ fn test_covariance_symmetric() {
 #[test]
 fn test_fitted_values_match_eta_transform() {
     let mut rng = Generator::new(42);
-    let df = rng.linear_gaussian(100, 1.0, 5.0, 1.0);
+    let (y, data) = rng.linear_gaussian(100, 1.0, 5.0, 1.0);
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -321,7 +330,7 @@ fn test_fitted_values_match_eta_transform() {
     );
     formula.insert("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Gaussian::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
     // For Gaussian with identity link, fitted_values should equal eta
     let mu = &model.models["mu"];
@@ -341,18 +350,12 @@ fn test_fitted_values_match_eta_transform() {
 
 #[test]
 fn test_random_effect_basic() {
-    let groups = vec!["A", "A", "A", "B", "B", "B", "C", "C", "C"];
-    let y = vec![1.0, 1.2, 0.8, 5.0, 5.1, 4.9, 3.0, 3.1, 2.9];
+    // Groups encoded as numeric indices: 0.0 = group A, 1.0 = group B, 2.0 = group C
+    let group = Array1::from_vec(vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0]);
+    let y = Array1::from_vec(vec![1.0, 1.2, 0.8, 5.0, 5.1, 4.9, 3.0, 3.1, 2.9]);
 
-    let df = df!(
-        "group" => groups,
-        "y" => y
-    )
-    .unwrap()
-    .lazy()
-    .with_column(col("group").cast(DataType::Categorical(None, Default::default())))
-    .collect()
-    .unwrap();
+    let mut data = HashMap::new();
+    data.insert("group".to_string(), group);
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -363,7 +366,7 @@ fn test_random_effect_basic() {
     );
     formula.insert("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Gaussian::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
     assert_eq!(
         model.models["mu"].coefficients.len(),
@@ -382,14 +385,16 @@ fn test_wide_data_more_predictors() {
     let x3: Vec<f64> = (0..n).map(|_| rng.rng.random::<f64>()).collect();
     let x4: Vec<f64> = (0..n).map(|_| rng.rng.random::<f64>()).collect();
 
-    let y: Vec<f64> = (0..n)
+    let y_vec: Vec<f64> = (0..n)
         .map(|i| 1.0 + x1[i] + 2.0 * x2[i] - x3[i] + 0.5 * x4[i] + rng.rng.random_range(-0.1..0.1))
         .collect();
 
-    let df = df!(
-        "x1" => x1, "x2" => x2, "x3" => x3, "x4" => x4, "y" => y
-    )
-    .unwrap();
+    let y = Array1::from_vec(y_vec);
+    let mut data = HashMap::new();
+    data.insert("x1".to_string(), Array1::from_vec(x1));
+    data.insert("x2".to_string(), Array1::from_vec(x2));
+    data.insert("x3".to_string(), Array1::from_vec(x3));
+    data.insert("x4".to_string(), Array1::from_vec(x4));
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -412,7 +417,7 @@ fn test_wide_data_more_predictors() {
     );
     formula.insert("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Gaussian::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
     let coeffs = &model.models["mu"].coefficients;
     assert_eq!(coeffs.len(), 5, "Should have 5 coefficients");
@@ -437,7 +442,7 @@ fn test_poisson_multiple_predictors() {
     let x2: Vec<f64> = (0..n).map(|_| rng.rng.random::<f64>() * 2.0).collect();
 
     // True model: log(mu) = 1.0 + 0.5*x1 - 0.3*x2
-    let y: Vec<f64> = (0..n)
+    let y_vec: Vec<f64> = (0..n)
         .map(|i| {
             let log_mu = 1.0 + 0.5 * x1[i] - 0.3 * x2[i];
             let mu = log_mu.exp();
@@ -446,7 +451,10 @@ fn test_poisson_multiple_predictors() {
         })
         .collect();
 
-    let df = df!("x1" => x1, "x2" => x2, "y" => y).unwrap();
+    let y = Array1::from_vec(y_vec);
+    let mut data = HashMap::new();
+    data.insert("x1".to_string(), Array1::from_vec(x1));
+    data.insert("x2".to_string(), Array1::from_vec(x2));
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -462,7 +470,7 @@ fn test_poisson_multiple_predictors() {
         ],
     );
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Poisson::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Poisson::new()).unwrap();
 
     let coeffs = &model.models["mu"].coefficients;
     assert!(
@@ -491,7 +499,7 @@ fn test_poisson_high_rate() {
     let x: Vec<f64> = (0..n).map(|i| i as f64 / n as f64 * 2.0).collect();
 
     // True model: log(mu) = 3.0 + 1.0*x => mu ranges from ~20 to ~109
-    let y: Vec<f64> = x
+    let y_vec: Vec<f64> = x
         .iter()
         .map(|&xi| {
             let mu = (3.0 + 1.0 * xi).exp();
@@ -500,7 +508,9 @@ fn test_poisson_high_rate() {
         })
         .collect();
 
-    let df = df!("x" => x, "y" => y).unwrap();
+    let y = Array1::from_vec(y_vec);
+    let mut data = HashMap::new();
+    data.insert("x".to_string(), Array1::from_vec(x));
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -513,7 +523,7 @@ fn test_poisson_high_rate() {
         ],
     );
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Poisson::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Poisson::new()).unwrap();
 
     let coeffs = &model.models["mu"].coefficients;
     assert!(
@@ -539,7 +549,7 @@ fn test_poisson_smooth_nonlinear() {
         .collect();
 
     // True model: log(mu) = 2.0 + 0.5*sin(x)
-    let y: Vec<f64> = x
+    let y_vec: Vec<f64> = x
         .iter()
         .map(|&xi| {
             let mu = (2.0 + 0.5 * xi.sin()).exp();
@@ -548,7 +558,9 @@ fn test_poisson_smooth_nonlinear() {
         })
         .collect();
 
-    let df = df!("x" => x, "y" => y).unwrap();
+    let y = Array1::from_vec(y_vec);
+    let mut data = HashMap::new();
+    data.insert("x".to_string(), Array1::from_vec(x));
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -561,7 +573,7 @@ fn test_poisson_smooth_nonlinear() {
         })],
     );
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Poisson::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Poisson::new()).unwrap();
 
     let edf = model.models["mu"].edf;
     // Should capture some curvature but not overfit
@@ -582,7 +594,7 @@ fn test_poisson_low_counts() {
     let x: Vec<f64> = (0..n).map(|i| i as f64 / n as f64).collect();
 
     // True model: log(mu) = -0.5 + 1.0*x => mu ranges from ~0.6 to ~1.6
-    let y: Vec<f64> = x
+    let y_vec: Vec<f64> = x
         .iter()
         .map(|&xi| {
             let mu = (-0.5 + 1.0 * xi).exp();
@@ -591,7 +603,9 @@ fn test_poisson_low_counts() {
         })
         .collect();
 
-    let df = df!("x" => x, "y" => y).unwrap();
+    let y = Array1::from_vec(y_vec);
+    let mut data = HashMap::new();
+    data.insert("x".to_string(), Array1::from_vec(x));
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -604,7 +618,7 @@ fn test_poisson_low_counts() {
         ],
     );
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Poisson::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Poisson::new()).unwrap();
 
     let coeffs = &model.models["mu"].coefficients;
     // Lower precision for low-count data
@@ -637,7 +651,7 @@ fn test_student_t_smooth_mu() {
         .map(|i| i as f64 / n as f64 * 2.0 * std::f64::consts::PI)
         .collect();
 
-    let y: Vec<f64> = x
+    let y_vec: Vec<f64> = x
         .iter()
         .map(|&xi| {
             let mu = 3.0 * xi.sin(); // sinusoidal mean
@@ -646,7 +660,9 @@ fn test_student_t_smooth_mu() {
         })
         .collect();
 
-    let df = df!("x" => x, "y" => y).unwrap();
+    let y = Array1::from_vec(y_vec);
+    let mut data = HashMap::new();
+    data.insert("x".to_string(), Array1::from_vec(x));
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -661,7 +677,7 @@ fn test_student_t_smooth_mu() {
     formula.insert("sigma".to_string(), vec![Term::Intercept]);
     formula.insert("nu".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &StudentT::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &StudentT::new()).unwrap();
 
     let edf = model.models["mu"].edf;
     assert!(
@@ -685,7 +701,7 @@ fn test_student_t_heteroskedastic() {
     // True model:
     // mu = 5.0 + 2.0*x
     // log(sigma) = -1.0 + 0.5*x => sigma varies from ~0.37 to ~0.82
-    let y: Vec<f64> = x
+    let y_vec: Vec<f64> = x
         .iter()
         .map(|&xi| {
             let mu = 5.0 + 2.0 * xi;
@@ -695,7 +711,9 @@ fn test_student_t_heteroskedastic() {
         })
         .collect();
 
-    let df = df!("x" => x, "y" => y).unwrap();
+    let y = Array1::from_vec(y_vec);
+    let mut data = HashMap::new();
+    data.insert("x".to_string(), Array1::from_vec(x));
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -718,7 +736,7 @@ fn test_student_t_heteroskedastic() {
     );
     formula.insert("nu".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &StudentT::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &StudentT::new()).unwrap();
 
     let mu_coeffs = &model.models["mu"].coefficients;
     let sigma_coeffs = &model.models["sigma"].coefficients;
@@ -760,7 +778,7 @@ fn test_student_t_heavy_tails() {
 
     let x: Vec<f64> = (0..n).map(|i| i as f64 / n as f64).collect();
 
-    let y: Vec<f64> = x
+    let y_vec: Vec<f64> = x
         .iter()
         .map(|&xi| {
             let mu = true_mu + 2.0 * xi;
@@ -769,7 +787,9 @@ fn test_student_t_heavy_tails() {
         })
         .collect();
 
-    let df = df!("x" => x, "y" => y).unwrap();
+    let y = Array1::from_vec(y_vec);
+    let mut data = HashMap::new();
+    data.insert("x".to_string(), Array1::from_vec(x));
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -784,7 +804,7 @@ fn test_student_t_heavy_tails() {
     formula.insert("sigma".to_string(), vec![Term::Intercept]);
     formula.insert("nu".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &StudentT::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &StudentT::new()).unwrap();
 
     let nu_coeff = model.models["nu"].coefficients[0];
     let fitted_nu = nu_coeff.exp();
@@ -816,7 +836,7 @@ fn test_student_t_multiple_predictors() {
     let x3: Vec<f64> = (0..n).map(|_| rng.rng.random::<f64>() * 2.0).collect();
 
     // True model: mu = 2.0 + 1.5*x1 - 0.8*x2 + 0.5*x3
-    let y: Vec<f64> = (0..n)
+    let y_vec: Vec<f64> = (0..n)
         .map(|i| {
             let mu = 2.0 + 1.5 * x1[i] - 0.8 * x2[i] + 0.5 * x3[i];
             let t_sample: f64 = rng.rng.sample(rand_distr::StudentT::new(nu).unwrap());
@@ -824,7 +844,11 @@ fn test_student_t_multiple_predictors() {
         })
         .collect();
 
-    let df = df!("x1" => x1, "x2" => x2, "x3" => x3, "y" => y).unwrap();
+    let y = Array1::from_vec(y_vec);
+    let mut data = HashMap::new();
+    data.insert("x1".to_string(), Array1::from_vec(x1));
+    data.insert("x2".to_string(), Array1::from_vec(x2));
+    data.insert("x3".to_string(), Array1::from_vec(x3));
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -845,7 +869,7 @@ fn test_student_t_multiple_predictors() {
     formula.insert("sigma".to_string(), vec![Term::Intercept]);
     formula.insert("nu".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &StudentT::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &StudentT::new()).unwrap();
 
     let coeffs = &model.models["mu"].coefficients;
     assert!(
@@ -883,7 +907,7 @@ fn test_student_t_near_gaussian() {
 
     let x: Vec<f64> = (0..n).map(|i| i as f64 / n as f64 * 2.0).collect();
 
-    let y: Vec<f64> = x
+    let y_vec: Vec<f64> = x
         .iter()
         .map(|&xi| {
             let mu = true_mu_int + true_mu_slope * xi;
@@ -892,7 +916,9 @@ fn test_student_t_near_gaussian() {
         })
         .collect();
 
-    let df = df!("x" => x, "y" => y).unwrap();
+    let y = Array1::from_vec(y_vec);
+    let mut data = HashMap::new();
+    data.insert("x".to_string(), Array1::from_vec(x));
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -907,7 +933,7 @@ fn test_student_t_near_gaussian() {
     formula.insert("sigma".to_string(), vec![Term::Intercept]);
     formula.insert("nu".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &StudentT::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &StudentT::new()).unwrap();
 
     let mu_coeffs = &model.models["mu"].coefficients;
 
@@ -951,7 +977,7 @@ fn test_gamma_linear_mu() {
     let x: Vec<f64> = (0..n).map(|i| i as f64 / n as f64 * 2.0).collect();
 
     // True model: log(mu) = 1.0 + 0.5*x => mu from ~2.7 to ~7.4
-    let y: Vec<f64> = x
+    let y_vec: Vec<f64> = x
         .iter()
         .map(|&xi| {
             let mu = (1.0 + 0.5 * xi).exp();
@@ -961,7 +987,9 @@ fn test_gamma_linear_mu() {
         })
         .collect();
 
-    let df = df!("x" => x, "y" => y).unwrap();
+    let y = Array1::from_vec(y_vec);
+    let mut data = HashMap::new();
+    data.insert("x".to_string(), Array1::from_vec(x));
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -975,7 +1003,7 @@ fn test_gamma_linear_mu() {
     );
     formula.insert("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Gamma::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Gamma::new()).unwrap();
 
     let mu_coeffs = &model.models["mu"].coefficients;
     // Coefficients are on log scale due to log link
@@ -1003,7 +1031,7 @@ fn test_gamma_heteroscedastic() {
     // True model:
     // log(mu) = 2.0 + 0.3*x
     // log(sigma) = -1.0 + 0.4*x => sigma varies from ~0.37 to ~0.82
-    let y: Vec<f64> = x
+    let y_vec: Vec<f64> = x
         .iter()
         .map(|&xi| {
             let mu = (2.0 + 0.3 * xi).exp();
@@ -1015,7 +1043,9 @@ fn test_gamma_heteroscedastic() {
         })
         .collect();
 
-    let df = df!("x" => x, "y" => y).unwrap();
+    let y = Array1::from_vec(y_vec);
+    let mut data = HashMap::new();
+    data.insert("x".to_string(), Array1::from_vec(x));
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -1037,7 +1067,7 @@ fn test_gamma_heteroscedastic() {
         ],
     );
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Gamma::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Gamma::new()).unwrap();
 
     let mu_coeffs = &model.models["mu"].coefficients;
     let sigma_coeffs = &model.models["sigma"].coefficients;
@@ -1078,7 +1108,7 @@ fn test_gamma_smooth_mu() {
         .collect();
 
     // True model: log(mu) = 2.0 + 0.3*sin(x)
-    let y: Vec<f64> = x
+    let y_vec: Vec<f64> = x
         .iter()
         .map(|&xi| {
             let mu = (2.0 + 0.3 * xi.sin()).exp();
@@ -1088,7 +1118,9 @@ fn test_gamma_smooth_mu() {
         })
         .collect();
 
-    let df = df!("x" => x, "y" => y).unwrap();
+    let y = Array1::from_vec(y_vec);
+    let mut data = HashMap::new();
+    data.insert("x".to_string(), Array1::from_vec(x));
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -1102,7 +1134,7 @@ fn test_gamma_smooth_mu() {
     );
     formula.insert("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Gamma::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Gamma::new()).unwrap();
 
     let edf = model.models["mu"].edf;
     assert!(
@@ -1128,7 +1160,7 @@ fn test_negative_binomial_linear() {
     let x: Vec<f64> = (0..n).map(|i| i as f64 / n as f64 * 2.0).collect();
 
     // True model: log(mu) = 1.5 + 0.5*x => mu from ~4.5 to ~12.2
-    let y: Vec<f64> = x
+    let y_vec: Vec<f64> = x
         .iter()
         .map(|&xi| {
             let mu = (1.5 + 0.5 * xi).exp();
@@ -1136,7 +1168,9 @@ fn test_negative_binomial_linear() {
         })
         .collect();
 
-    let df = df!("x" => x, "y" => y).unwrap();
+    let y = Array1::from_vec(y_vec);
+    let mut data = HashMap::new();
+    data.insert("x".to_string(), Array1::from_vec(x));
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -1150,7 +1184,7 @@ fn test_negative_binomial_linear() {
     );
     formula.insert("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &NegativeBinomial::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &NegativeBinomial::new()).unwrap();
 
     let mu_coeffs = &model.models["mu"].coefficients;
     assert!(
@@ -1176,7 +1210,7 @@ fn test_negative_binomial_overdispersed() {
     let x: Vec<f64> = (0..n).map(|i| i as f64 / n as f64 * 2.0).collect();
 
     // True model: log(mu) = 2.0 + 0.3*x
-    let y: Vec<f64> = x
+    let y_vec: Vec<f64> = x
         .iter()
         .map(|&xi| {
             let mu = (2.0 + 0.3 * xi).exp();
@@ -1184,7 +1218,9 @@ fn test_negative_binomial_overdispersed() {
         })
         .collect();
 
-    let df = df!("x" => x, "y" => y).unwrap();
+    let y = Array1::from_vec(y_vec);
+    let mut data = HashMap::new();
+    data.insert("x".to_string(), Array1::from_vec(x));
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -1198,7 +1234,7 @@ fn test_negative_binomial_overdispersed() {
     );
     formula.insert("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &NegativeBinomial::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &NegativeBinomial::new()).unwrap();
 
     let mu_coeffs = &model.models["mu"].coefficients;
     assert!(
@@ -1235,7 +1271,7 @@ fn test_negative_binomial_smooth() {
         .collect();
 
     // True model: log(mu) = 2.5 + 0.5*sin(x)
-    let y: Vec<f64> = x
+    let y_vec: Vec<f64> = x
         .iter()
         .map(|&xi| {
             let mu = (2.5 + 0.5 * xi.sin()).exp();
@@ -1243,7 +1279,9 @@ fn test_negative_binomial_smooth() {
         })
         .collect();
 
-    let df = df!("x" => x, "y" => y).unwrap();
+    let y = Array1::from_vec(y_vec);
+    let mut data = HashMap::new();
+    data.insert("x".to_string(), Array1::from_vec(x));
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -1257,7 +1295,7 @@ fn test_negative_binomial_smooth() {
     );
     formula.insert("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &NegativeBinomial::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &NegativeBinomial::new()).unwrap();
 
     let edf = model.models["mu"].edf;
     assert!(
@@ -1280,14 +1318,17 @@ fn test_negative_binomial_multiple_predictors() {
     let x2: Vec<f64> = (0..n).map(|_| rng.rng.random::<f64>() * 2.0).collect();
 
     // True model: log(mu) = 1.0 + 0.5*x1 - 0.3*x2
-    let y: Vec<f64> = (0..n)
+    let y_vec: Vec<f64> = (0..n)
         .map(|i| {
             let mu = (1.0 + 0.5 * x1[i] - 0.3 * x2[i]).exp();
             sample_negative_binomial(&mut rng.rng, mu, sigma)
         })
         .collect();
 
-    let df = df!("x1" => x1, "x2" => x2, "y" => y).unwrap();
+    let y = Array1::from_vec(y_vec);
+    let mut data = HashMap::new();
+    data.insert("x1".to_string(), Array1::from_vec(x1));
+    data.insert("x2".to_string(), Array1::from_vec(x2));
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -1304,7 +1345,7 @@ fn test_negative_binomial_multiple_predictors() {
     );
     formula.insert("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &NegativeBinomial::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &NegativeBinomial::new()).unwrap();
 
     let mu_coeffs = &model.models["mu"].coefficients;
     assert!(
@@ -1345,7 +1386,7 @@ fn test_beta_linear_mu() {
     let x: Vec<f64> = (0..n).map(|i| i as f64 / n as f64 * 2.0 - 1.0).collect(); // x in [-1, 1]
 
     // True model: logit(mu) = 0.0 + 0.5*x => mu varies around 0.5
-    let y: Vec<f64> = x
+    let y_vec: Vec<f64> = x
         .iter()
         .map(|&xi| {
             let eta = 0.0 + 0.5 * xi;
@@ -1356,7 +1397,9 @@ fn test_beta_linear_mu() {
         })
         .collect();
 
-    let df = df!("x" => x, "y" => y).unwrap();
+    let y = Array1::from_vec(y_vec);
+    let mut data = HashMap::new();
+    data.insert("x".to_string(), Array1::from_vec(x));
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -1370,7 +1413,7 @@ fn test_beta_linear_mu() {
     );
     formula.insert("phi".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Beta::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Beta::new()).unwrap();
 
     let mu_coeffs = &model.models["mu"].coefficients;
     // Coefficients are on logit scale
@@ -1398,7 +1441,7 @@ fn test_beta_varying_precision() {
     // True model:
     // logit(mu) = 0.0 (constant mu = 0.5)
     // log(phi) = 1.0 + 0.5*x => phi varies from ~2.7 to ~7.4
-    let y: Vec<f64> = x
+    let y_vec: Vec<f64> = x
         .iter()
         .map(|&xi| {
             let mu = 0.5;
@@ -1409,7 +1452,9 @@ fn test_beta_varying_precision() {
         })
         .collect();
 
-    let df = df!("x" => x, "y" => y).unwrap();
+    let y = Array1::from_vec(y_vec);
+    let mut data = HashMap::new();
+    data.insert("x".to_string(), Array1::from_vec(x));
 
     let mut formula = HashMap::new();
     formula.insert("mu".to_string(), vec![Term::Intercept]);
@@ -1423,7 +1468,7 @@ fn test_beta_varying_precision() {
         ],
     );
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Beta::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Beta::new()).unwrap();
 
     let phi_coeffs = &model.models["phi"].coefficients;
     assert!(
@@ -1451,7 +1496,7 @@ fn test_beta_smooth_mu() {
         .collect();
 
     // True model: logit(mu) = 0.3*sin(x) => mu oscillates around 0.5
-    let y: Vec<f64> = x
+    let y_vec: Vec<f64> = x
         .iter()
         .map(|&xi| {
             let eta = 0.3 * xi.sin();
@@ -1462,7 +1507,9 @@ fn test_beta_smooth_mu() {
         })
         .collect();
 
-    let df = df!("x" => x, "y" => y).unwrap();
+    let y = Array1::from_vec(y_vec);
+    let mut data = HashMap::new();
+    data.insert("x".to_string(), Array1::from_vec(x));
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -1476,7 +1523,7 @@ fn test_beta_smooth_mu() {
     );
     formula.insert("phi".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Beta::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Beta::new()).unwrap();
 
     let edf = model.models["mu"].edf;
     assert!(edf > 2.0, "Beta smooth mu EDF too low: {}", edf);
@@ -1494,7 +1541,7 @@ fn test_beta_high_precision() {
     let x: Vec<f64> = (0..n).map(|i| i as f64 / n as f64).collect();
 
     // True model: logit(mu) = -0.5 + 1.0*x
-    let y: Vec<f64> = x
+    let y_vec: Vec<f64> = x
         .iter()
         .map(|&xi| {
             let eta = -0.5 + 1.0 * xi;
@@ -1505,7 +1552,9 @@ fn test_beta_high_precision() {
         })
         .collect();
 
-    let df = df!("x" => x, "y" => y).unwrap();
+    let y = Array1::from_vec(y_vec);
+    let mut data = HashMap::new();
+    data.insert("x".to_string(), Array1::from_vec(x));
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -1519,7 +1568,7 @@ fn test_beta_high_precision() {
     );
     formula.insert("phi".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Beta::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Beta::new()).unwrap();
 
     let mu_coeffs = &model.models["mu"].coefficients;
     assert!(
@@ -1557,7 +1606,7 @@ fn test_binomial_linear() {
     let true_slope = 2.0;
 
     let x: Vec<f64> = (0..n).map(|i| i as f64 / n as f64).collect();
-    let y: Vec<f64> = x
+    let y_vec: Vec<f64> = x
         .iter()
         .map(|&xi| {
             let eta = true_intercept + true_slope * xi;
@@ -1567,7 +1616,9 @@ fn test_binomial_linear() {
         })
         .collect();
 
-    let df = df!("x" => x, "y" => y).unwrap();
+    let y = Array1::from_vec(y_vec);
+    let mut data = HashMap::new();
+    data.insert("x".to_string(), Array1::from_vec(x));
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -1580,7 +1631,7 @@ fn test_binomial_linear() {
         ],
     );
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Binomial::new(n_trials)).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Binomial::new(n_trials)).unwrap();
 
     let mu_coeffs = &model.models["mu"].coefficients;
     assert!(
@@ -1606,19 +1657,20 @@ fn test_binomial_high_probability() {
     let n_trials = 50;
     let true_mu = 0.8; // High probability
 
-    let y: Vec<f64> = (0..n)
+    let y_vec: Vec<f64> = (0..n)
         .map(|_| {
             let dist = rand_distr::Binomial::new(n_trials as u64, true_mu).unwrap();
             rng.rng.sample(dist) as f64
         })
         .collect();
 
-    let df = df!("y" => y).unwrap();
+    let y = Array1::from_vec(y_vec);
+    let data = HashMap::new();
 
     let mut formula = HashMap::new();
     formula.insert("mu".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Binomial::new(n_trials)).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Binomial::new(n_trials)).unwrap();
 
     // Check fitted probability is close to true value
     let mu_coeff = model.models["mu"].coefficients[0];
@@ -1642,7 +1694,7 @@ fn test_binomial_multiple_predictors() {
     let x1: Vec<f64> = (0..n).map(|i| i as f64 / n as f64).collect();
     let x2: Vec<f64> = (0..n).map(|_| rng.rng.random::<f64>()).collect();
 
-    let y: Vec<f64> = x1
+    let y_vec: Vec<f64> = x1
         .iter()
         .zip(x2.iter())
         .map(|(&xi1, &xi2)| {
@@ -1653,7 +1705,10 @@ fn test_binomial_multiple_predictors() {
         })
         .collect();
 
-    let df = df!("x1" => x1, "x2" => x2, "y" => y).unwrap();
+    let y = Array1::from_vec(y_vec);
+    let mut data = HashMap::new();
+    data.insert("x1".to_string(), Array1::from_vec(x1));
+    data.insert("x2".to_string(), Array1::from_vec(x2));
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -1669,7 +1724,7 @@ fn test_binomial_multiple_predictors() {
         ],
     );
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Binomial::new(n_trials)).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Binomial::new(n_trials)).unwrap();
 
     let mu_coeffs = &model.models["mu"].coefficients;
     assert_eq!(mu_coeffs.0.len(), 3, "Should have 3 coefficients");

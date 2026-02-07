@@ -7,10 +7,10 @@ use ndarray::concatenate;
 use ndarray::{s, Array1, Array2, Axis};
 use std::collections::HashMap;
 
-fn get_col(
-    data: &HashMap<String, Array1<f64>>,
+fn get_col<'a>(
+    data: &'a HashMap<String, Array1<f64>>,
     name: &str,
-) -> Result<&Array1<f64>, GamlssError> {
+) -> Result<&'a Array1<f64>, GamlssError> {
     data.get(name).ok_or_else(|| GamlssError::MissingVariable {
         name: name.to_string(),
     })
@@ -81,11 +81,12 @@ fn assemble_smooth(
             let mut group_to_id: HashMap<String, usize> = HashMap::new();
 
             for val in group_var.iter() {
-                let key = val.to_string();
-                if !group_to_id.contains_key(&key) {
+                let key: String = val.to_string();
+                if let std::collections::hash_map::Entry::Vacant(e) = group_to_id.entry(key.clone())
+                {
                     let id = unique_groups.len();
-                    unique_groups.push(key.clone());
-                    group_to_id.insert(key, id);
+                    unique_groups.push(key);
+                    e.insert(id);
                 }
             }
 
@@ -93,7 +94,7 @@ fn assemble_smooth(
             let mut basis = Array2::<f64>::zeros((n_obs, n_groups));
 
             for (i, val) in group_var.iter().enumerate() {
-                let key = val.to_string();
+                let key: String = val.to_string();
                 if let Some(&group_id) = group_to_id.get(&key) {
                     basis[[i, group_id]] = 1.0;
                 }
@@ -136,10 +137,12 @@ pub fn assemble_model_matrices(
             }
             Term::Linear { col_name } => {
                 let x_col_vec = get_col(data, col_name)?;
-                let part = x_col_vec
+                let part: Array2<f64> = x_col_vec
                     .to_owned()
                     .into_shape_with_order((n_obs, 1))
-                    .map_err(|err| GamlssError::ComputationError(err.to_string()))?;
+                    .map_err(|err: ndarray::ShapeError| {
+                        GamlssError::ComputationError(err.to_string())
+                    })?;
                 model_matrix_parts.push(part);
                 total_coeffs += 1;
             }

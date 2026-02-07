@@ -7,8 +7,8 @@
 //!
 //! The backend is selected at compile time via feature flags.
 
-use ndarray::{Array1, Array2};
 use crate::GamlssError;
+use ndarray::{Array1, Array2};
 
 /// Result type for linear algebra operations.
 pub type Result<T> = std::result::Result<T, GamlssError>;
@@ -78,11 +78,11 @@ pub fn cholesky_lower(a: &Array2<f64>) -> Result<Array2<f64>> {
     let a_faer = ndarray_to_faer_mat(a);
 
     // Compute Cholesky decomposition
-    let chol = a_faer
-        .cholesky(faer::Side::Lower)
-        .map_err(|_| GamlssError::Linalg(
-            "Cholesky decomposition failed (matrix not positive definite)".to_string()
-        ))?;
+    let chol = a_faer.cholesky(faer::Side::Lower).map_err(|_| {
+        GamlssError::Linalg(
+            "Cholesky decomposition failed (matrix not positive definite)".to_string(),
+        )
+    })?;
 
     // The Cholesky object itself represents L, we can use it directly
     // Extract the lower triangular matrix

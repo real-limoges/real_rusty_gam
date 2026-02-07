@@ -5,7 +5,7 @@ use gamlss_rs::{
     distributions::{Gaussian, Poisson},
     GamlssModel, Smooth, Term,
 };
-use polars::prelude::*;
+use ndarray::Array1;
 use rand::Rng;
 use std::collections::HashMap;
 
@@ -13,7 +13,7 @@ use std::collections::HashMap;
 fn test_predict_on_training_data() {
     // Predictions on training data should match fitted values
     let mut rng = Generator::new(42);
-    let df = rng.linear_gaussian(100, 2.0, 5.0, 1.0);
+    let (y, data) = rng.linear_gaussian(100, 2.0, 5.0, 1.0);
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -27,10 +27,10 @@ fn test_predict_on_training_data() {
     );
     formula.insert("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Gaussian::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
     // Predict on the same data
-    let predictions = model.predict(&df, &Gaussian::new()).unwrap();
+    let predictions = model.predict(&data, &Gaussian::new()).unwrap();
 
     // Check that predictions match fitted values
     let mu_pred = &predictions["mu"];
@@ -52,7 +52,7 @@ fn test_predict_on_training_data() {
 fn test_predict_on_new_data() {
     // Test prediction on new data points
     let mut rng = Generator::new(123);
-    let df_train = rng.linear_gaussian(200, 2.0, 5.0, 1.0);
+    let (y, data) = rng.linear_gaussian(200, 2.0, 5.0, 1.0);
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -66,15 +66,15 @@ fn test_predict_on_new_data() {
     );
     formula.insert("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df_train, "y", &formula, &Gaussian::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
     // Create new data
-    let df_new = df!(
-        "x" => [0.0, 50.0, 100.0, 150.0, 200.0]
-    )
-    .unwrap();
+    let new_data = HashMap::from([(
+        "x".to_string(),
+        Array1::from_vec(vec![0.0, 50.0, 100.0, 150.0, 200.0]),
+    )]);
 
-    let predictions = model.predict(&df_new, &Gaussian::new()).unwrap();
+    let predictions = model.predict(&new_data, &Gaussian::new()).unwrap();
     let mu_pred = &predictions["mu"];
 
     // For linear model: mu = intercept + slope * x
@@ -99,7 +99,7 @@ fn test_predict_on_new_data() {
 #[test]
 fn test_predict_with_se() {
     let mut rng = Generator::new(456);
-    let df = rng.linear_gaussian(100, 2.0, 5.0, 1.0);
+    let (y, data) = rng.linear_gaussian(100, 2.0, 5.0, 1.0);
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -113,9 +113,9 @@ fn test_predict_with_se() {
     );
     formula.insert("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Gaussian::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
-    let results = model.predict_with_se(&df, &Gaussian::new()).unwrap();
+    let results = model.predict_with_se(&data, &Gaussian::new()).unwrap();
 
     let mu_result = &results["mu"];
 
@@ -150,7 +150,8 @@ fn test_predict_poisson() {
         })
         .collect();
 
-    let df = df!("x" => x, "y" => y).unwrap();
+    let y = Array1::from_vec(y);
+    let data = HashMap::from([("x".to_string(), Array1::from_vec(x))]);
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -163,10 +164,10 @@ fn test_predict_poisson() {
         ],
     );
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Poisson::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Poisson::new()).unwrap();
 
     // Predict on training data
-    let predictions = model.predict(&df, &Poisson::new()).unwrap();
+    let predictions = model.predict(&data, &Poisson::new()).unwrap();
     let mu_pred = &predictions["mu"];
 
     // All predictions should be positive (Poisson has log link)
@@ -183,7 +184,7 @@ fn test_predict_poisson() {
 #[test]
 fn test_posterior_samples() {
     let mut rng = Generator::new(999);
-    let df = rng.linear_gaussian(100, 2.0, 5.0, 1.0);
+    let (y, data) = rng.linear_gaussian(100, 2.0, 5.0, 1.0);
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -197,7 +198,7 @@ fn test_posterior_samples() {
     );
     formula.insert("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Gaussian::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
     // Get posterior samples for mu
     let samples = model.posterior_samples("mu", 100);
@@ -233,7 +234,7 @@ fn test_posterior_samples() {
 #[test]
 fn test_predict_samples() {
     let mut rng = Generator::new(111);
-    let df = rng.linear_gaussian(50, 2.0, 5.0, 1.0);
+    let (y, data) = rng.linear_gaussian(50, 2.0, 5.0, 1.0);
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -247,10 +248,10 @@ fn test_predict_samples() {
     );
     formula.insert("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Gaussian::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
     // Get prediction samples
-    let pred_samples = model.predict_samples(&df, &Gaussian::new(), 50).unwrap();
+    let pred_samples = model.predict_samples(&data, &Gaussian::new(), 50).unwrap();
 
     // Check mu predictions
     let mu_samples = &pred_samples["mu"];
@@ -275,7 +276,8 @@ fn test_predict_with_smooth() {
         .map(|&xi| xi.sin() + rng.rng.sample::<f64, _>(rand_distr::StandardNormal) * 0.2)
         .collect();
 
-    let df = df!("x" => x, "y" => y).unwrap();
+    let y = Array1::from_vec(y);
+    let data = HashMap::from([("x".to_string(), Array1::from_vec(x))]);
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -289,10 +291,10 @@ fn test_predict_with_smooth() {
     );
     formula.insert("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Gaussian::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
     // Predict on training data
-    let predictions = model.predict(&df, &Gaussian::new()).unwrap();
+    let predictions = model.predict(&data, &Gaussian::new()).unwrap();
     let mu_pred = &predictions["mu"];
 
     // Predictions should capture the sinusoidal pattern
@@ -326,7 +328,7 @@ fn test_predict_with_smooth() {
 #[test]
 fn test_predict_missing_column_error() {
     let mut rng = Generator::new(333);
-    let df_train = rng.linear_gaussian(100, 2.0, 5.0, 1.0);
+    let (y, data) = rng.linear_gaussian(100, 2.0, 5.0, 1.0);
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -340,11 +342,11 @@ fn test_predict_missing_column_error() {
     );
     formula.insert("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df_train, "y", &formula, &Gaussian::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
     // Try to predict on data missing the 'x' column
-    let df_bad = df!("z" => [1.0, 2.0, 3.0]).unwrap();
+    let bad_data = HashMap::from([("z".to_string(), Array1::from_vec(vec![1.0, 2.0, 3.0]))]);
 
-    let result = model.predict(&df_bad, &Gaussian::new());
+    let result = model.predict(&bad_data, &Gaussian::new());
     assert!(result.is_err(), "Should error when column is missing");
 }

@@ -152,7 +152,6 @@ fn bench_special_functions(c: &mut Criterion) {
 
 fn bench_full_model_fit(c: &mut Criterion) {
     use gamlss_rs::{GamlssModel, Term};
-    use polars::prelude::*;
 
     let mut group = c.benchmark_group("full_model_fit");
     group.sample_size(20); // Fewer samples for slower benchmarks
@@ -160,18 +159,15 @@ fn bench_full_model_fit(c: &mut Criterion) {
     for n in [100, 500].iter() {
         // Generate synthetic data
         let x: Vec<f64> = (0..*n).map(|i| i as f64 / *n as f64).collect();
-        let y: Vec<f64> = x.iter().map(|&xi| 5.0 + 2.0 * xi + 0.1 * xi * xi).collect();
+        let y_vec: Vec<f64> = x.iter().map(|&xi| 5.0 + 2.0 * xi + 0.1 * xi * xi).collect();
 
-        let df = df! {
-            "x" => &x,
-            "y" => &y,
-        }
-        .unwrap();
+        let y = Array1::from_vec(y_vec);
+        let data = HashMap::from([("x".to_string(), Array1::from_vec(x))]);
 
         // Poisson with linear predictor
-        group.bench_with_input(BenchmarkId::new("poisson_linear", n), &df, |b, df| {
+        group.bench_with_input(BenchmarkId::new("poisson_linear", n), n, |b, _| {
             b.iter(|| {
-                let formula = std::collections::HashMap::from([(
+                let formula = HashMap::from([(
                     "mu".to_string(),
                     vec![
                         Term::Intercept,
@@ -180,14 +176,14 @@ fn bench_full_model_fit(c: &mut Criterion) {
                         },
                     ],
                 )]);
-                black_box(GamlssModel::fit(df, "y", &formula, &Poisson).unwrap())
+                black_box(GamlssModel::fit(&y, &data, &formula, &Poisson).unwrap())
             })
         });
 
         // Gaussian with two parameters
-        group.bench_with_input(BenchmarkId::new("gaussian_linear", n), &df, |b, df| {
+        group.bench_with_input(BenchmarkId::new("gaussian_linear", n), n, |b, _| {
             b.iter(|| {
-                let formula = std::collections::HashMap::from([
+                let formula = HashMap::from([
                     (
                         "mu".to_string(),
                         vec![
@@ -199,7 +195,7 @@ fn bench_full_model_fit(c: &mut Criterion) {
                     ),
                     ("sigma".to_string(), vec![Term::Intercept]),
                 ]);
-                black_box(GamlssModel::fit(df, "y", &formula, &Gaussian).unwrap())
+                black_box(GamlssModel::fit(&y, &data, &formula, &Gaussian).unwrap())
             })
         });
     }

@@ -1,8 +1,8 @@
 use gamlss_rs::{distributions::StudentT, GamlssModel, Term};
-use polars::prelude::*;
+use ndarray::Array1;
 use rand::prelude::*;
 use rand_distr::{Distribution, StudentT as StudentTDist};
-use std::collections::HashMap; // We need the actual distribution generator
+use std::collections::HashMap;
 
 #[test]
 fn test_student_t_recovery() {
@@ -34,11 +34,9 @@ fn test_student_t_recovery() {
         })
         .collect();
 
-    let df = df! {
-        "x" => &x_vals,
-        "y" => &y_vals,
-    }
-    .unwrap();
+    let y = Array1::from_vec(y_vals);
+    let mut data = HashMap::new();
+    data.insert("x".to_string(), Array1::from_vec(x_vals));
 
     let mut formulas = HashMap::new();
 
@@ -54,7 +52,7 @@ fn test_student_t_recovery() {
     formulas.insert("sigma".to_string(), vec![Term::Intercept]);
     formulas.insert("nu".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formulas, &StudentT::new()).expect("Fit failed");
+    let model = GamlssModel::fit(&y, &data, &formulas, &StudentT::new()).expect("Fit failed");
 
     // assertions
     let mu_coeffs = &model.models["mu"].coefficients;

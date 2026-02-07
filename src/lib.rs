@@ -13,14 +13,12 @@ mod types;
 pub use diagnostics::ModelDiagnostics;
 pub use error::GamlssError;
 pub use fitting::{FitConfig, FitDiagnostics, ParamDiagnostic};
-pub use preprocessing::PreprocessingError;
 pub use terms::{Smooth, Term};
 pub use types::*;
 
 use distributions::Distribution;
 use fitting::assembler::assemble_model_matrices;
 use ndarray::Array1;
-use polars::prelude::DataFrame;
 use preprocessing::validate_inputs;
 use std::collections::HashMap;
 
@@ -32,37 +30,24 @@ pub struct GamlssModel {
 
 impl GamlssModel {
     pub fn fit<D: Distribution>(
-        data: &DataFrame,
-        y_name: &str,
+        y: &Array1<f64>,
+        data: &HashMap<String, Array1<f64>>,
         formula: &HashMap<String, Vec<Term>>,
         family: &D,
     ) -> Result<Self, GamlssError> {
-        Self::fit_with_config(data, y_name, formula, family, FitConfig::default())
+        Self::fit_with_config(y, data, formula, family, FitConfig::default())
     }
 
     pub fn fit_with_config<D: Distribution>(
-        data: &DataFrame,
-        y_name: &str,
+        y: &Array1<f64>,
+        data: &HashMap<String, Array1<f64>>,
         formula: &HashMap<String, Vec<Term>>,
         family: &D,
         config: FitConfig,
     ) -> Result<Self, GamlssError> {
-        validate_inputs(data, y_name, formula, family)?;
+        validate_inputs(y, data, formula, family)?;
 
-        let y_series = data.column(y_name).map_err(|e| {
-            GamlssError::Input(format!("Target Column '{}' not found: {}", y_name, e))
-        })?;
-
-        let y_rechunked = y_series.f64()?.rechunk();
-        let binding = y_rechunked.to_ndarray()?;
-        let y_vec = binding
-            .to_shape(y_series.len())
-            .map_err(|e| GamlssError::Shape(e.to_string()))?;
-
-        let y_vector = y_vec.to_owned();
-
-        let (fitted_models, diagnostics) =
-            fitting::fit_gamlss(data, &y_vector, formula, family, &config)?;
+        let (fitted_models, diagnostics) = fitting::fit_gamlss(data, y, formula, family, &config)?;
 
         Ok(Self {
             models: fitted_models,
@@ -80,10 +65,10 @@ impl GamlssModel {
     /// as values. The distribution is needed to obtain the appropriate link functions.
     pub fn predict<D: Distribution>(
         &self,
-        new_data: &DataFrame,
+        new_data: &HashMap<String, Array1<f64>>,
         family: &D,
     ) -> Result<HashMap<String, Array1<f64>>, GamlssError> {
-        let n_obs = new_data.height();
+        let n_obs = new_data.values().next().map(|v| v.len()).unwrap_or(0);
         let mut predictions = HashMap::new();
 
         for (param_name, fitted_param) in &self.models {
@@ -105,10 +90,10 @@ impl GamlssModel {
     /// where V is the covariance matrix of the coefficients.
     pub fn predict_with_se<D: Distribution>(
         &self,
-        new_data: &DataFrame,
+        new_data: &HashMap<String, Array1<f64>>,
         family: &D,
     ) -> Result<HashMap<String, PredictionResult>, GamlssError> {
-        let n_obs = new_data.height();
+        let n_obs = new_data.values().next().map(|v| v.len()).unwrap_or(0);
         let mut results = HashMap::new();
 
         for (param_name, fitted_param) in &self.models {
@@ -168,11 +153,11 @@ impl GamlssModel {
     /// Returns samples of fitted values on the response scale.
     pub fn predict_samples<D: Distribution>(
         &self,
-        new_data: &DataFrame,
+        new_data: &HashMap<String, Array1<f64>>,
         family: &D,
         n_samples: usize,
     ) -> Result<HashMap<String, Vec<Array1<f64>>>, GamlssError> {
-        let n_obs = new_data.height();
+        let n_obs = new_data.values().next().map(|v| v.len()).unwrap_or(0);
         let mut results = HashMap::new();
 
         for (param_name, fitted_param) in &self.models {

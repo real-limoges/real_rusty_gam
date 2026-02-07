@@ -332,7 +332,8 @@ impl Distribution for StudentT {
         };
 
         #[cfg(not(feature = "parallel"))]
-        let w_robust: Array1<f64> = nu.iter()
+        let w_robust: Array1<f64> = nu
+            .iter()
             .zip(z_sq.iter())
             .map(|(&nu_i, &z2_i)| (nu_i + 1.0) / (nu_i + z2_i))
             .collect();
@@ -434,7 +435,8 @@ impl Distribution for StudentT {
         };
 
         #[cfg(not(feature = "parallel"))]
-        let w_nu: Array1<f64> = i_nu.iter()
+        let w_nu: Array1<f64> = i_nu
+            .iter()
             .zip(nu.iter())
             .map(|(&i, &nu_i)| (i * nu_i.powi(2)).abs().max(MIN_WEIGHT))
             .collect();

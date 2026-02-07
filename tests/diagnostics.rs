@@ -103,7 +103,7 @@ fn test_aic_bic() {
 #[test]
 fn test_total_edf() {
     let mut rng = Generator::new(42);
-    let df = rng.linear_gaussian(100, 1.0, 5.0, 1.0);
+    let (y, data) = rng.linear_gaussian(100, 1.0, 5.0, 1.0);
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -117,7 +117,7 @@ fn test_total_edf() {
     );
     formula.insert("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Gaussian::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
     let edf = total_edf(&model.models);
 
@@ -133,7 +133,7 @@ fn test_total_edf() {
 #[test]
 fn test_diagnostics_with_fitted_model() {
     let mut rng = Generator::new(123);
-    let df = rng.linear_gaussian(200, 2.0, 5.0, 1.0);
+    let (y, data) = rng.linear_gaussian(200, 2.0, 5.0, 1.0);
 
     let mut formula = HashMap::new();
     formula.insert(
@@ -147,16 +147,11 @@ fn test_diagnostics_with_fitted_model() {
     );
     formula.insert("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&df, "y", &formula, &Gaussian::new()).unwrap();
+    let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
     // Extract fitted values
     let mu = &model.models["mu"].fitted_values;
     let sigma = &model.models["sigma"].fitted_values;
-
-    // Get y values
-    let y_series = df.column("y").unwrap();
-    let y_vec: Vec<f64> = y_series.f64().unwrap().into_no_null_iter().collect();
-    let y = Array1::from_vec(y_vec);
 
     // Compute residuals
     let pearson_res = pearson_residuals_gaussian(&y, mu, sigma);

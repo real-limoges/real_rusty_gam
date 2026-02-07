@@ -1,8 +1,9 @@
 #![allow(dead_code)]
 
-use polars::prelude::*;
+use ndarray::Array1;
 use rand::prelude::*;
 use rand_distr::{Distribution, Normal, Poisson};
+use std::collections::HashMap;
 
 pub struct Generator {
     pub rng: StdRng,
@@ -15,7 +16,12 @@ impl Generator {
         }
     }
 
-    pub fn poisson_data(&mut self, n: usize, intercept: f64, slope: f64) -> DataFrame {
+    pub fn poisson_data(
+        &mut self,
+        n: usize,
+        intercept: f64,
+        slope: f64,
+    ) -> (Array1<f64>, HashMap<String, Array1<f64>>) {
         let x: Vec<f64> = (0..n).map(|i| (i as f64 / n as f64) * 4.0).collect();
         let y: Vec<f64> = x
             .iter()
@@ -26,10 +32,15 @@ impl Generator {
             })
             .collect();
 
-        df!("x" => x, "y" => y).unwrap()
+        let mut data = HashMap::new();
+        data.insert("x".to_string(), Array1::from_vec(x));
+        (Array1::from_vec(y), data)
     }
 
-    pub fn heteroskedastic_gaussian(&mut self, n: usize) -> DataFrame {
+    pub fn heteroskedastic_gaussian(
+        &mut self,
+        n: usize,
+    ) -> (Array1<f64>, HashMap<String, Array1<f64>>) {
         let x: Vec<f64> = (0..n).map(|i| (i as f64 / n as f64) * 3.0).collect();
         let y: Vec<f64> = x
             .iter()
@@ -41,16 +52,17 @@ impl Generator {
             })
             .collect();
 
-        df!("x" => x, "y" => y).unwrap()
+        let mut data = HashMap::new();
+        data.insert("x".to_string(), Array1::from_vec(x));
+        (Array1::from_vec(y), data)
     }
 
-    pub fn tensor_surface(&mut self, n: usize) -> DataFrame {
+    pub fn tensor_surface(&mut self, n: usize) -> (Array1<f64>, HashMap<String, Array1<f64>>) {
         let mut x1 = Vec::new();
         let mut x2 = Vec::new();
         let mut y = Vec::new();
 
         for _ in 0..n {
-            // Updated to .random() and .random_range() for Rust 2024 compatibility
             let v1: f64 = self.rng.random();
             let v2: f64 = self.rng.random();
 
@@ -64,7 +76,10 @@ impl Generator {
             y.push(mu + noise);
         }
 
-        df!("x1" => x1, "x2" => x2, "y" => y).unwrap()
+        let mut data = HashMap::new();
+        data.insert("x1".to_string(), Array1::from_vec(x1));
+        data.insert("x2".to_string(), Array1::from_vec(x2));
+        (Array1::from_vec(y), data)
     }
 
     pub fn linear_gaussian(
@@ -73,7 +88,7 @@ impl Generator {
         slope: f64,
         intercept: f64,
         sigma: f64,
-    ) -> DataFrame {
+    ) -> (Array1<f64>, HashMap<String, Array1<f64>>) {
         let x: Vec<f64> = (0..n).map(|i| i as f64).collect();
         let y: Vec<f64> = x
             .iter()
@@ -84,6 +99,8 @@ impl Generator {
             })
             .collect();
 
-        df!("x" => x, "y" => y).unwrap()
+        let mut data = HashMap::new();
+        data.insert("x".to_string(), Array1::from_vec(x));
+        (Array1::from_vec(y), data)
     }
 }

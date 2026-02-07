@@ -10,7 +10,7 @@ default = ["openblas", "parallel"]
 openblas = ["ndarray-linalg"]
 pure-rust = ["faer"]
 
-# WASM target (implies pure-rust, no polars, no parallel)
+# WASM target (implies pure-rust, no parallel)
 wasm = ["pure-rust", "wasm-bindgen", "serde", "serde_json"]
 
 # Parallelism (incompatible with WASM)
