@@ -3,11 +3,10 @@ mod common;
 use common::Generator;
 use gamlss_rs::{
     distributions::{Beta, Binomial, Gamma, Gaussian, NegativeBinomial, Poisson, StudentT},
-    GamlssModel, Smooth, Term,
+    DataSet, Formula, GamlssModel, Smooth, Term,
 };
 use ndarray::Array1;
 use rand::Rng;
-use std::collections::HashMap;
 
 // Helper to sample from Negative Binomial using Gamma-Poisson mixture
 // NB(mu, sigma) where r = 1/sigma, Var(Y) = mu + sigma*mu^2
@@ -37,11 +36,11 @@ fn test_poisson_with_smooth() {
         .collect();
 
     let y = Array1::from_vec(y_vec);
-    let mut data = HashMap::new();
-    data.insert("x".to_string(), Array1::from_vec(x));
+    let mut data = DataSet::new();
+    data.insert_column("x".to_string(), Array1::from_vec(x));
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![Term::Smooth(Smooth::PSpline1D {
             col_name: "x".to_string(),
@@ -74,11 +73,11 @@ fn test_student_t_linear() {
         .collect();
 
     let y = Array1::from_vec(y_vec);
-    let mut data = HashMap::new();
-    data.insert("x".to_string(), Array1::from_vec(x));
+    let mut data = DataSet::new();
+    data.insert_column("x".to_string(), Array1::from_vec(x));
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -87,8 +86,8 @@ fn test_student_t_linear() {
             },
         ],
     );
-    formula.insert("sigma".to_string(), vec![Term::Intercept]);
-    formula.insert("nu".to_string(), vec![Term::Intercept]);
+    formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
+    formula.add_terms("nu".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &StudentT::new()).unwrap();
 
@@ -111,8 +110,8 @@ fn test_different_spline_configs() {
     let (y, data) = rng.linear_gaussian(200, 1.0, 5.0, 1.0);
 
     for n_splines in [5, 10, 20] {
-        let mut formula = HashMap::new();
-        formula.insert(
+        let mut formula = Formula::new();
+        formula.add_terms(
             "mu".to_string(),
             vec![Term::Smooth(Smooth::PSpline1D {
                 col_name: "x".to_string(),
@@ -121,7 +120,7 @@ fn test_different_spline_configs() {
                 penalty_order: 2,
             })],
         );
-        formula.insert("sigma".to_string(), vec![Term::Intercept]);
+        formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
         let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new());
         assert!(model.is_ok(), "Failed with n_splines={}", n_splines);
@@ -142,12 +141,12 @@ fn test_penalty_order_1_vs_2() {
         .collect();
 
     let y = Array1::from_vec(y_vec);
-    let mut data = HashMap::new();
-    data.insert("x".to_string(), Array1::from_vec(x));
+    let mut data = DataSet::new();
+    data.insert_column("x".to_string(), Array1::from_vec(x));
 
     // penalizes first differences
-    let mut formula1 = HashMap::new();
-    formula1.insert(
+    let mut formula1 = Formula::new();
+    formula1.add_terms(
         "mu".to_string(),
         vec![Term::Smooth(Smooth::PSpline1D {
             col_name: "x".to_string(),
@@ -156,11 +155,11 @@ fn test_penalty_order_1_vs_2() {
             penalty_order: 1,
         })],
     );
-    formula1.insert("sigma".to_string(), vec![Term::Intercept]);
+    formula1.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
     // penalizes second differences - curvature
-    let mut formula2 = HashMap::new();
-    formula2.insert(
+    let mut formula2 = Formula::new();
+    formula2.add_terms(
         "mu".to_string(),
         vec![Term::Smooth(Smooth::PSpline1D {
             col_name: "x".to_string(),
@@ -169,7 +168,7 @@ fn test_penalty_order_1_vs_2() {
             penalty_order: 2,
         })],
     );
-    formula2.insert("sigma".to_string(), vec![Term::Intercept]);
+    formula2.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
     let model1 = GamlssModel::fit(&y, &data, &formula1, &Gaussian::new()).unwrap();
     let model2 = GamlssModel::fit(&y, &data, &formula2, &Gaussian::new()).unwrap();
@@ -193,11 +192,11 @@ fn test_very_noisy_data() {
         .collect();
 
     let y = Array1::from_vec(y_vec);
-    let mut data = HashMap::new();
-    data.insert("x".to_string(), Array1::from_vec(x));
+    let mut data = DataSet::new();
+    data.insert_column("x".to_string(), Array1::from_vec(x));
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -206,7 +205,7 @@ fn test_very_noisy_data() {
             },
         ],
     );
-    formula.insert("sigma".to_string(), vec![Term::Intercept]);
+    formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
@@ -223,14 +222,14 @@ fn test_very_noisy_data() {
 fn test_perfect_linear_fit() {
     // perfect linear relationship
     let y = Array1::from_vec(vec![0.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0]);
-    let mut data = HashMap::new();
-    data.insert(
+    let mut data = DataSet::new();
+    data.insert_column(
         "x".to_string(),
         Array1::from_vec(vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]),
     );
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -239,7 +238,7 @@ fn test_perfect_linear_fit() {
             },
         ],
     );
-    formula.insert("sigma".to_string(), vec![Term::Intercept]);
+    formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
@@ -261,8 +260,8 @@ fn test_lambdas_positive() {
     let mut rng = Generator::new(42);
     let (y, data) = rng.linear_gaussian(200, 1.0, 5.0, 1.0);
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![Term::Smooth(Smooth::PSpline1D {
             col_name: "x".to_string(),
@@ -271,7 +270,7 @@ fn test_lambdas_positive() {
             penalty_order: 2,
         })],
     );
-    formula.insert("sigma".to_string(), vec![Term::Intercept]);
+    formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
@@ -286,8 +285,8 @@ fn test_covariance_symmetric() {
     let mut rng = Generator::new(42);
     let (y, data) = rng.linear_gaussian(100, 1.0, 5.0, 1.0);
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -296,7 +295,7 @@ fn test_covariance_symmetric() {
             },
         ],
     );
-    formula.insert("sigma".to_string(), vec![Term::Intercept]);
+    formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
@@ -318,8 +317,8 @@ fn test_fitted_values_match_eta_transform() {
     let mut rng = Generator::new(42);
     let (y, data) = rng.linear_gaussian(100, 1.0, 5.0, 1.0);
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -328,7 +327,7 @@ fn test_fitted_values_match_eta_transform() {
             },
         ],
     );
-    formula.insert("sigma".to_string(), vec![Term::Intercept]);
+    formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
@@ -354,17 +353,17 @@ fn test_random_effect_basic() {
     let group = Array1::from_vec(vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0]);
     let y = Array1::from_vec(vec![1.0, 1.2, 0.8, 5.0, 5.1, 4.9, 3.0, 3.1, 2.9]);
 
-    let mut data = HashMap::new();
-    data.insert("group".to_string(), group);
+    let mut data = DataSet::new();
+    data.insert_column("group".to_string(), group);
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![Term::Smooth(Smooth::RandomEffect {
             col_name: "group".to_string(),
         })],
     );
-    formula.insert("sigma".to_string(), vec![Term::Intercept]);
+    formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
@@ -390,14 +389,14 @@ fn test_wide_data_more_predictors() {
         .collect();
 
     let y = Array1::from_vec(y_vec);
-    let mut data = HashMap::new();
-    data.insert("x1".to_string(), Array1::from_vec(x1));
-    data.insert("x2".to_string(), Array1::from_vec(x2));
-    data.insert("x3".to_string(), Array1::from_vec(x3));
-    data.insert("x4".to_string(), Array1::from_vec(x4));
+    let mut data = DataSet::new();
+    data.insert_column("x1".to_string(), Array1::from_vec(x1));
+    data.insert_column("x2".to_string(), Array1::from_vec(x2));
+    data.insert_column("x3".to_string(), Array1::from_vec(x3));
+    data.insert_column("x4".to_string(), Array1::from_vec(x4));
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -415,7 +414,7 @@ fn test_wide_data_more_predictors() {
             },
         ],
     );
-    formula.insert("sigma".to_string(), vec![Term::Intercept]);
+    formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
@@ -452,12 +451,12 @@ fn test_poisson_multiple_predictors() {
         .collect();
 
     let y = Array1::from_vec(y_vec);
-    let mut data = HashMap::new();
-    data.insert("x1".to_string(), Array1::from_vec(x1));
-    data.insert("x2".to_string(), Array1::from_vec(x2));
+    let mut data = DataSet::new();
+    data.insert_column("x1".to_string(), Array1::from_vec(x1));
+    data.insert_column("x2".to_string(), Array1::from_vec(x2));
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -509,11 +508,11 @@ fn test_poisson_high_rate() {
         .collect();
 
     let y = Array1::from_vec(y_vec);
-    let mut data = HashMap::new();
-    data.insert("x".to_string(), Array1::from_vec(x));
+    let mut data = DataSet::new();
+    data.insert_column("x".to_string(), Array1::from_vec(x));
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -559,11 +558,11 @@ fn test_poisson_smooth_nonlinear() {
         .collect();
 
     let y = Array1::from_vec(y_vec);
-    let mut data = HashMap::new();
-    data.insert("x".to_string(), Array1::from_vec(x));
+    let mut data = DataSet::new();
+    data.insert_column("x".to_string(), Array1::from_vec(x));
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![Term::Smooth(Smooth::PSpline1D {
             col_name: "x".to_string(),
@@ -604,11 +603,11 @@ fn test_poisson_low_counts() {
         .collect();
 
     let y = Array1::from_vec(y_vec);
-    let mut data = HashMap::new();
-    data.insert("x".to_string(), Array1::from_vec(x));
+    let mut data = DataSet::new();
+    data.insert_column("x".to_string(), Array1::from_vec(x));
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -661,11 +660,11 @@ fn test_student_t_smooth_mu() {
         .collect();
 
     let y = Array1::from_vec(y_vec);
-    let mut data = HashMap::new();
-    data.insert("x".to_string(), Array1::from_vec(x));
+    let mut data = DataSet::new();
+    data.insert_column("x".to_string(), Array1::from_vec(x));
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![Term::Smooth(Smooth::PSpline1D {
             col_name: "x".to_string(),
@@ -674,8 +673,8 @@ fn test_student_t_smooth_mu() {
             penalty_order: 2,
         })],
     );
-    formula.insert("sigma".to_string(), vec![Term::Intercept]);
-    formula.insert("nu".to_string(), vec![Term::Intercept]);
+    formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
+    formula.add_terms("nu".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &StudentT::new()).unwrap();
 
@@ -712,11 +711,11 @@ fn test_student_t_heteroskedastic() {
         .collect();
 
     let y = Array1::from_vec(y_vec);
-    let mut data = HashMap::new();
-    data.insert("x".to_string(), Array1::from_vec(x));
+    let mut data = DataSet::new();
+    data.insert_column("x".to_string(), Array1::from_vec(x));
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -725,7 +724,7 @@ fn test_student_t_heteroskedastic() {
             },
         ],
     );
-    formula.insert(
+    formula.add_terms(
         "sigma".to_string(),
         vec![
             Term::Intercept,
@@ -734,7 +733,7 @@ fn test_student_t_heteroskedastic() {
             },
         ],
     );
-    formula.insert("nu".to_string(), vec![Term::Intercept]);
+    formula.add_terms("nu".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &StudentT::new()).unwrap();
 
@@ -788,11 +787,11 @@ fn test_student_t_heavy_tails() {
         .collect();
 
     let y = Array1::from_vec(y_vec);
-    let mut data = HashMap::new();
-    data.insert("x".to_string(), Array1::from_vec(x));
+    let mut data = DataSet::new();
+    data.insert_column("x".to_string(), Array1::from_vec(x));
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -801,8 +800,8 @@ fn test_student_t_heavy_tails() {
             },
         ],
     );
-    formula.insert("sigma".to_string(), vec![Term::Intercept]);
-    formula.insert("nu".to_string(), vec![Term::Intercept]);
+    formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
+    formula.add_terms("nu".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &StudentT::new()).unwrap();
 
@@ -845,13 +844,13 @@ fn test_student_t_multiple_predictors() {
         .collect();
 
     let y = Array1::from_vec(y_vec);
-    let mut data = HashMap::new();
-    data.insert("x1".to_string(), Array1::from_vec(x1));
-    data.insert("x2".to_string(), Array1::from_vec(x2));
-    data.insert("x3".to_string(), Array1::from_vec(x3));
+    let mut data = DataSet::new();
+    data.insert_column("x1".to_string(), Array1::from_vec(x1));
+    data.insert_column("x2".to_string(), Array1::from_vec(x2));
+    data.insert_column("x3".to_string(), Array1::from_vec(x3));
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -866,8 +865,8 @@ fn test_student_t_multiple_predictors() {
             },
         ],
     );
-    formula.insert("sigma".to_string(), vec![Term::Intercept]);
-    formula.insert("nu".to_string(), vec![Term::Intercept]);
+    formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
+    formula.add_terms("nu".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &StudentT::new()).unwrap();
 
@@ -917,11 +916,11 @@ fn test_student_t_near_gaussian() {
         .collect();
 
     let y = Array1::from_vec(y_vec);
-    let mut data = HashMap::new();
-    data.insert("x".to_string(), Array1::from_vec(x));
+    let mut data = DataSet::new();
+    data.insert_column("x".to_string(), Array1::from_vec(x));
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -930,8 +929,8 @@ fn test_student_t_near_gaussian() {
             },
         ],
     );
-    formula.insert("sigma".to_string(), vec![Term::Intercept]);
-    formula.insert("nu".to_string(), vec![Term::Intercept]);
+    formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
+    formula.add_terms("nu".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &StudentT::new()).unwrap();
 
@@ -988,11 +987,11 @@ fn test_gamma_linear_mu() {
         .collect();
 
     let y = Array1::from_vec(y_vec);
-    let mut data = HashMap::new();
-    data.insert("x".to_string(), Array1::from_vec(x));
+    let mut data = DataSet::new();
+    data.insert_column("x".to_string(), Array1::from_vec(x));
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -1001,7 +1000,7 @@ fn test_gamma_linear_mu() {
             },
         ],
     );
-    formula.insert("sigma".to_string(), vec![Term::Intercept]);
+    formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &Gamma::new()).unwrap();
 
@@ -1044,11 +1043,11 @@ fn test_gamma_heteroscedastic() {
         .collect();
 
     let y = Array1::from_vec(y_vec);
-    let mut data = HashMap::new();
-    data.insert("x".to_string(), Array1::from_vec(x));
+    let mut data = DataSet::new();
+    data.insert_column("x".to_string(), Array1::from_vec(x));
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -1057,7 +1056,7 @@ fn test_gamma_heteroscedastic() {
             },
         ],
     );
-    formula.insert(
+    formula.add_terms(
         "sigma".to_string(),
         vec![
             Term::Intercept,
@@ -1119,11 +1118,11 @@ fn test_gamma_smooth_mu() {
         .collect();
 
     let y = Array1::from_vec(y_vec);
-    let mut data = HashMap::new();
-    data.insert("x".to_string(), Array1::from_vec(x));
+    let mut data = DataSet::new();
+    data.insert_column("x".to_string(), Array1::from_vec(x));
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![Term::Smooth(Smooth::PSpline1D {
             col_name: "x".to_string(),
@@ -1132,7 +1131,7 @@ fn test_gamma_smooth_mu() {
             penalty_order: 2,
         })],
     );
-    formula.insert("sigma".to_string(), vec![Term::Intercept]);
+    formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &Gamma::new()).unwrap();
 
@@ -1169,11 +1168,11 @@ fn test_negative_binomial_linear() {
         .collect();
 
     let y = Array1::from_vec(y_vec);
-    let mut data = HashMap::new();
-    data.insert("x".to_string(), Array1::from_vec(x));
+    let mut data = DataSet::new();
+    data.insert_column("x".to_string(), Array1::from_vec(x));
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -1182,7 +1181,7 @@ fn test_negative_binomial_linear() {
             },
         ],
     );
-    formula.insert("sigma".to_string(), vec![Term::Intercept]);
+    formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &NegativeBinomial::new()).unwrap();
 
@@ -1219,11 +1218,11 @@ fn test_negative_binomial_overdispersed() {
         .collect();
 
     let y = Array1::from_vec(y_vec);
-    let mut data = HashMap::new();
-    data.insert("x".to_string(), Array1::from_vec(x));
+    let mut data = DataSet::new();
+    data.insert_column("x".to_string(), Array1::from_vec(x));
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -1232,7 +1231,7 @@ fn test_negative_binomial_overdispersed() {
             },
         ],
     );
-    formula.insert("sigma".to_string(), vec![Term::Intercept]);
+    formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &NegativeBinomial::new()).unwrap();
 
@@ -1280,11 +1279,11 @@ fn test_negative_binomial_smooth() {
         .collect();
 
     let y = Array1::from_vec(y_vec);
-    let mut data = HashMap::new();
-    data.insert("x".to_string(), Array1::from_vec(x));
+    let mut data = DataSet::new();
+    data.insert_column("x".to_string(), Array1::from_vec(x));
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![Term::Smooth(Smooth::PSpline1D {
             col_name: "x".to_string(),
@@ -1293,7 +1292,7 @@ fn test_negative_binomial_smooth() {
             penalty_order: 2,
         })],
     );
-    formula.insert("sigma".to_string(), vec![Term::Intercept]);
+    formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &NegativeBinomial::new()).unwrap();
 
@@ -1326,12 +1325,12 @@ fn test_negative_binomial_multiple_predictors() {
         .collect();
 
     let y = Array1::from_vec(y_vec);
-    let mut data = HashMap::new();
-    data.insert("x1".to_string(), Array1::from_vec(x1));
-    data.insert("x2".to_string(), Array1::from_vec(x2));
+    let mut data = DataSet::new();
+    data.insert_column("x1".to_string(), Array1::from_vec(x1));
+    data.insert_column("x2".to_string(), Array1::from_vec(x2));
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -1343,7 +1342,7 @@ fn test_negative_binomial_multiple_predictors() {
             },
         ],
     );
-    formula.insert("sigma".to_string(), vec![Term::Intercept]);
+    formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &NegativeBinomial::new()).unwrap();
 
@@ -1398,11 +1397,11 @@ fn test_beta_linear_mu() {
         .collect();
 
     let y = Array1::from_vec(y_vec);
-    let mut data = HashMap::new();
-    data.insert("x".to_string(), Array1::from_vec(x));
+    let mut data = DataSet::new();
+    data.insert_column("x".to_string(), Array1::from_vec(x));
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -1411,7 +1410,7 @@ fn test_beta_linear_mu() {
             },
         ],
     );
-    formula.insert("phi".to_string(), vec![Term::Intercept]);
+    formula.add_terms("phi".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &Beta::new()).unwrap();
 
@@ -1453,12 +1452,12 @@ fn test_beta_varying_precision() {
         .collect();
 
     let y = Array1::from_vec(y_vec);
-    let mut data = HashMap::new();
-    data.insert("x".to_string(), Array1::from_vec(x));
+    let mut data = DataSet::new();
+    data.insert_column("x".to_string(), Array1::from_vec(x));
 
-    let mut formula = HashMap::new();
-    formula.insert("mu".to_string(), vec![Term::Intercept]);
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms("mu".to_string(), vec![Term::Intercept]);
+    formula.add_terms(
         "phi".to_string(),
         vec![
             Term::Intercept,
@@ -1508,11 +1507,11 @@ fn test_beta_smooth_mu() {
         .collect();
 
     let y = Array1::from_vec(y_vec);
-    let mut data = HashMap::new();
-    data.insert("x".to_string(), Array1::from_vec(x));
+    let mut data = DataSet::new();
+    data.insert_column("x".to_string(), Array1::from_vec(x));
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![Term::Smooth(Smooth::PSpline1D {
             col_name: "x".to_string(),
@@ -1521,7 +1520,7 @@ fn test_beta_smooth_mu() {
             penalty_order: 2,
         })],
     );
-    formula.insert("phi".to_string(), vec![Term::Intercept]);
+    formula.add_terms("phi".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &Beta::new()).unwrap();
 
@@ -1553,11 +1552,11 @@ fn test_beta_high_precision() {
         .collect();
 
     let y = Array1::from_vec(y_vec);
-    let mut data = HashMap::new();
-    data.insert("x".to_string(), Array1::from_vec(x));
+    let mut data = DataSet::new();
+    data.insert_column("x".to_string(), Array1::from_vec(x));
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -1566,7 +1565,7 @@ fn test_beta_high_precision() {
             },
         ],
     );
-    formula.insert("phi".to_string(), vec![Term::Intercept]);
+    formula.add_terms("phi".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &Beta::new()).unwrap();
 
@@ -1617,11 +1616,11 @@ fn test_binomial_linear() {
         .collect();
 
     let y = Array1::from_vec(y_vec);
-    let mut data = HashMap::new();
-    data.insert("x".to_string(), Array1::from_vec(x));
+    let mut data = DataSet::new();
+    data.insert_column("x".to_string(), Array1::from_vec(x));
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -1665,10 +1664,10 @@ fn test_binomial_high_probability() {
         .collect();
 
     let y = Array1::from_vec(y_vec);
-    let data = HashMap::new();
+    let data = DataSet::new();
 
-    let mut formula = HashMap::new();
-    formula.insert("mu".to_string(), vec![Term::Intercept]);
+    let mut formula = Formula::new();
+    formula.add_terms("mu".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &Binomial::new(n_trials)).unwrap();
 
@@ -1706,12 +1705,12 @@ fn test_binomial_multiple_predictors() {
         .collect();
 
     let y = Array1::from_vec(y_vec);
-    let mut data = HashMap::new();
-    data.insert("x1".to_string(), Array1::from_vec(x1));
-    data.insert("x2".to_string(), Array1::from_vec(x2));
+    let mut data = DataSet::new();
+    data.insert_column("x1".to_string(), Array1::from_vec(x1));
+    data.insert_column("x2".to_string(), Array1::from_vec(x2));
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,

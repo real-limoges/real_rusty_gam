@@ -3,11 +3,10 @@ mod common;
 use common::Generator;
 use gamlss_rs::{
     distributions::{Gaussian, Poisson},
-    GamlssModel, Smooth, Term,
+    DataSet, Formula, GamlssModel, Smooth, Term,
 };
 use ndarray::Array1;
 use rand::Rng;
-use std::collections::HashMap;
 
 #[test]
 fn test_predict_on_training_data() {
@@ -15,8 +14,8 @@ fn test_predict_on_training_data() {
     let mut rng = Generator::new(42);
     let (y, data) = rng.linear_gaussian(100, 2.0, 5.0, 1.0);
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -25,7 +24,7 @@ fn test_predict_on_training_data() {
             },
         ],
     );
-    formula.insert("sigma".to_string(), vec![Term::Intercept]);
+    formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
@@ -54,8 +53,8 @@ fn test_predict_on_new_data() {
     let mut rng = Generator::new(123);
     let (y, data) = rng.linear_gaussian(200, 2.0, 5.0, 1.0);
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -64,15 +63,13 @@ fn test_predict_on_new_data() {
             },
         ],
     );
-    formula.insert("sigma".to_string(), vec![Term::Intercept]);
+    formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
     // Create new data
-    let new_data = HashMap::from([(
-        "x".to_string(),
-        Array1::from_vec(vec![0.0, 50.0, 100.0, 150.0, 200.0]),
-    )]);
+    let mut new_data = DataSet::new();
+    new_data.insert_column("x", Array1::from_vec(vec![0.0, 50.0, 100.0, 150.0, 200.0]));
 
     let predictions = model.predict(&new_data, &Gaussian::new()).unwrap();
     let mu_pred = &predictions["mu"];
@@ -101,8 +98,8 @@ fn test_predict_with_se() {
     let mut rng = Generator::new(456);
     let (y, data) = rng.linear_gaussian(100, 2.0, 5.0, 1.0);
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -111,7 +108,7 @@ fn test_predict_with_se() {
             },
         ],
     );
-    formula.insert("sigma".to_string(), vec![Term::Intercept]);
+    formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
@@ -151,10 +148,11 @@ fn test_predict_poisson() {
         .collect();
 
     let y = Array1::from_vec(y);
-    let data = HashMap::from([("x".to_string(), Array1::from_vec(x))]);
+    let mut data = DataSet::new();
+    data.insert_column("x", Array1::from_vec(x));
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -186,8 +184,8 @@ fn test_posterior_samples() {
     let mut rng = Generator::new(999);
     let (y, data) = rng.linear_gaussian(100, 2.0, 5.0, 1.0);
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -196,7 +194,7 @@ fn test_posterior_samples() {
             },
         ],
     );
-    formula.insert("sigma".to_string(), vec![Term::Intercept]);
+    formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
@@ -236,8 +234,8 @@ fn test_predict_samples() {
     let mut rng = Generator::new(111);
     let (y, data) = rng.linear_gaussian(50, 2.0, 5.0, 1.0);
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -246,7 +244,7 @@ fn test_predict_samples() {
             },
         ],
     );
-    formula.insert("sigma".to_string(), vec![Term::Intercept]);
+    formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
@@ -277,10 +275,11 @@ fn test_predict_with_smooth() {
         .collect();
 
     let y = Array1::from_vec(y);
-    let data = HashMap::from([("x".to_string(), Array1::from_vec(x))]);
+    let mut data = DataSet::new();
+    data.insert_column("x", Array1::from_vec(x));
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![Term::Smooth(Smooth::PSpline1D {
             col_name: "x".to_string(),
@@ -289,7 +288,7 @@ fn test_predict_with_smooth() {
             penalty_order: 2,
         })],
     );
-    formula.insert("sigma".to_string(), vec![Term::Intercept]);
+    formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
@@ -330,8 +329,8 @@ fn test_predict_missing_column_error() {
     let mut rng = Generator::new(333);
     let (y, data) = rng.linear_gaussian(100, 2.0, 5.0, 1.0);
 
-    let mut formula = HashMap::new();
-    formula.insert(
+    let mut formula = Formula::new();
+    formula.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -340,12 +339,13 @@ fn test_predict_missing_column_error() {
             },
         ],
     );
-    formula.insert("sigma".to_string(), vec![Term::Intercept]);
+    formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
 
     // Try to predict on data missing the 'x' column
-    let bad_data = HashMap::from([("z".to_string(), Array1::from_vec(vec![1.0, 2.0, 3.0]))]);
+    let mut bad_data = DataSet::new();
+    bad_data.insert_column("z", Array1::from_vec(vec![1.0, 2.0, 3.0]));
 
     let result = model.predict(&bad_data, &Gaussian::new());
     assert!(result.is_err(), "Should error when column is missing");

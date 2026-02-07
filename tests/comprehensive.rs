@@ -3,11 +3,10 @@ mod common;
 use common::Generator;
 use gamlss_rs::{
     distributions::{Gaussian, Poisson},
-    GamlssModel, Smooth, Term,
+    DataSet, Formula, GamlssModel, Smooth, Term,
 };
 use ndarray::Array1;
 use rand::seq::SliceRandom;
-use std::collections::HashMap;
 
 #[test]
 fn test_poisson_recovery() {
@@ -15,8 +14,8 @@ fn test_poisson_recovery() {
     let (true_int, true_slope) = (1.5, 0.5);
     let (y, data) = rand_gen.poisson_data(1000, true_int, true_slope);
 
-    let mut formulas = HashMap::new();
-    formulas.insert(
+    let mut formulas = Formula::new();
+    formulas.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -47,8 +46,8 @@ fn test_heteroskedastic_gaussian_recovery() {
     let mut rand_gen = Generator::new(456);
     let (y, data) = rand_gen.heteroskedastic_gaussian(2000);
 
-    let mut formulas = HashMap::new();
-    formulas.insert(
+    let mut formulas = Formula::new();
+    formulas.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -57,7 +56,7 @@ fn test_heteroskedastic_gaussian_recovery() {
             },
         ],
     );
-    formulas.insert(
+    formulas.add_terms(
         "sigma".to_string(),
         vec![
             Term::Intercept,
@@ -87,8 +86,8 @@ fn test_tensor_product_complexity() {
     let mut rand_gen = Generator::new(123);
     let (y, data) = rand_gen.tensor_surface(400);
 
-    let mut formulas = HashMap::new();
-    formulas.insert(
+    let mut formulas = Formula::new();
+    formulas.add_terms(
         "mu".to_string(),
         vec![Term::Smooth(Smooth::TensorProduct {
             col_name_1: "x1".to_string(),
@@ -100,7 +99,7 @@ fn test_tensor_product_complexity() {
             degree: 3,
         })],
     );
-    formulas.insert("sigma".to_string(), vec![Term::Intercept]);
+    formulas.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
     let model =
         GamlssModel::fit(&y, &data, &formulas, &Gaussian::new()).expect("Tensor Fit Failed!");
@@ -119,8 +118,8 @@ fn test_model_convergence_invariants() {
     let mut rand_gen = Generator::new(42);
     let (y, data) = rand_gen.linear_gaussian(500, 1.0, 5.0, 1.0);
 
-    let mut formulas = HashMap::new();
-    formulas.insert(
+    let mut formulas = Formula::new();
+    formulas.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -129,7 +128,7 @@ fn test_model_convergence_invariants() {
             },
         ],
     );
-    formulas.insert("sigma".to_string(), vec![Term::Intercept]);
+    formulas.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
     let model_1 = GamlssModel::fit(&y, &data, &formulas, &Gaussian::new()).unwrap();
 
@@ -139,9 +138,9 @@ fn test_model_convergence_invariants() {
     indices.shuffle(&mut rand_gen.rng);
 
     let y_shuffled = Array1::from_vec(indices.iter().map(|&i| y[i]).collect());
-    let mut data_shuffled = HashMap::new();
-    for (key, arr) in &data {
-        data_shuffled.insert(
+    let mut data_shuffled = DataSet::new();
+    for (key, arr) in data.iter() {
+        data_shuffled.insert_column(
             key.clone(),
             Array1::from_vec(indices.iter().map(|&i| arr[i]).collect()),
         );
@@ -175,7 +174,7 @@ fn test_spline_partition_of_unity() {
         penalty_order: 2,
     });
 
-    let n_obs = data.values().next().unwrap().len();
+    let n_obs = data.n_obs().unwrap();
     let (mm, _, _) =
         gamlss_rs::fitting::assembler::assemble_model_matrices(&data, n_obs, &[term]).unwrap();
 

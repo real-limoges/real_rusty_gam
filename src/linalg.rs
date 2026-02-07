@@ -72,8 +72,6 @@ pub fn inv(a: &Array2<f64>) -> Result<Array2<f64>> {
 
 #[cfg(feature = "pure-rust")]
 pub fn cholesky_lower(a: &Array2<f64>) -> Result<Array2<f64>> {
-    use faer::prelude::*;
-
     // Convert ndarray -> faer
     let a_faer = ndarray_to_faer_mat(a);
 

@@ -151,7 +151,7 @@ fn bench_special_functions(c: &mut Criterion) {
 }
 
 fn bench_full_model_fit(c: &mut Criterion) {
-    use gamlss_rs::{GamlssModel, Term};
+    use gamlss_rs::{DataSet, Formula, GamlssModel, Term};
 
     let mut group = c.benchmark_group("full_model_fit");
     group.sample_size(20); // Fewer samples for slower benchmarks
@@ -162,20 +162,21 @@ fn bench_full_model_fit(c: &mut Criterion) {
         let y_vec: Vec<f64> = x.iter().map(|&xi| 5.0 + 2.0 * xi + 0.1 * xi * xi).collect();
 
         let y = Array1::from_vec(y_vec);
-        let data = HashMap::from([("x".to_string(), Array1::from_vec(x))]);
+        let mut data = DataSet::new();
+        data.insert_column("x", Array1::from_vec(x));
 
         // Poisson with linear predictor
         group.bench_with_input(BenchmarkId::new("poisson_linear", n), n, |b, _| {
             b.iter(|| {
-                let formula = HashMap::from([(
-                    "mu".to_string(),
+                let formula = Formula::new().with_terms(
+                    "mu",
                     vec![
                         Term::Intercept,
                         Term::Linear {
                             col_name: "x".to_string(),
                         },
                     ],
-                )]);
+                );
                 black_box(GamlssModel::fit(&y, &data, &formula, &Poisson).unwrap())
             })
         });
@@ -183,18 +184,17 @@ fn bench_full_model_fit(c: &mut Criterion) {
         // Gaussian with two parameters
         group.bench_with_input(BenchmarkId::new("gaussian_linear", n), n, |b, _| {
             b.iter(|| {
-                let formula = HashMap::from([
-                    (
-                        "mu".to_string(),
+                let formula = Formula::new()
+                    .with_terms(
+                        "mu",
                         vec![
                             Term::Intercept,
                             Term::Linear {
                                 col_name: "x".to_string(),
                             },
                         ],
-                    ),
-                    ("sigma".to_string(), vec![Term::Intercept]),
-                ]);
+                    )
+                    .with_terms("sigma", vec![Term::Intercept]);
                 black_box(GamlssModel::fit(&y, &data, &formula, &Gaussian).unwrap())
             })
         });

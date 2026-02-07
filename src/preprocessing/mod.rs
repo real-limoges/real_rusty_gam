@@ -1,8 +1,8 @@
 use crate::distributions::Distribution;
 use crate::error::GamlssError;
-use crate::terms::Term;
+use crate::types::{DataSet, Formula};
 use ndarray::prelude::*;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 /// Validates input data and formula for model fitting.
 ///
@@ -15,8 +15,8 @@ use std::collections::{HashMap, HashSet};
 /// - All numeric variables contain only finite values
 pub fn validate_inputs<D: Distribution>(
     y: &Array1<f64>,
-    data: &HashMap<String, Array1<f64>>,
-    formula: &HashMap<String, Vec<Term>>,
+    data: &DataSet,
+    formula: &Formula,
     family: &D,
 ) -> Result<(), GamlssError> {
     // Check dataset is not empty

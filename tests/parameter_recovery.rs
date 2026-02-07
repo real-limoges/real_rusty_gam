@@ -1,8 +1,7 @@
-use gamlss_rs::{distributions::StudentT, GamlssModel, Term};
+use gamlss_rs::{distributions::StudentT, DataSet, Formula, GamlssModel, Term};
 use ndarray::Array1;
 use rand::prelude::*;
 use rand_distr::{Distribution, StudentT as StudentTDist};
-use std::collections::HashMap;
 
 #[test]
 fn test_student_t_recovery() {
@@ -35,12 +34,12 @@ fn test_student_t_recovery() {
         .collect();
 
     let y = Array1::from_vec(y_vals);
-    let mut data = HashMap::new();
-    data.insert("x".to_string(), Array1::from_vec(x_vals));
+    let mut data = DataSet::new();
+    data.insert_column("x", Array1::from_vec(x_vals));
 
-    let mut formulas = HashMap::new();
+    let mut formulas = Formula::new();
 
-    formulas.insert(
+    formulas.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -49,8 +48,8 @@ fn test_student_t_recovery() {
             },
         ],
     );
-    formulas.insert("sigma".to_string(), vec![Term::Intercept]);
-    formulas.insert("nu".to_string(), vec![Term::Intercept]);
+    formulas.add_terms("sigma".to_string(), vec![Term::Intercept]);
+    formulas.add_terms("nu".to_string(), vec![Term::Intercept]);
 
     let model = GamlssModel::fit(&y, &data, &formulas, &StudentT::new()).expect("Fit failed");
 

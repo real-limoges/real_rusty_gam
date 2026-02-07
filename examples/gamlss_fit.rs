@@ -1,8 +1,7 @@
 use gamlss_rs::distributions::StudentT;
-use gamlss_rs::{GamlssError, GamlssModel, Smooth, Term};
+use gamlss_rs::{DataSet, Formula, GamlssError, GamlssModel, Smooth, Term};
 use ndarray::Array1;
 use rand::Rng;
-use std::collections::HashMap;
 
 fn main() -> Result<(), GamlssError> {
     // Generate Synthetic Data
@@ -24,14 +23,14 @@ fn main() -> Result<(), GamlssError> {
         .collect();
 
     let y = Array1::from_vec(y_vals);
-    let mut data = HashMap::new();
-    data.insert("x".to_string(), Array1::from_vec(x_vals));
+    let mut data = DataSet::new();
+    data.insert_column("x", Array1::from_vec(x_vals));
 
-    // the formula hashmap
-    let mut formulas = HashMap::new();
+    // the formula
+    let mut formulas = Formula::new();
 
     // Mu: Smooth P-Spline
-    formulas.insert(
+    formulas.add_terms(
         "mu".to_string(),
         vec![
             Term::Intercept,
@@ -45,7 +44,7 @@ fn main() -> Result<(), GamlssError> {
     );
 
     // Sigma: Linear
-    formulas.insert(
+    formulas.add_terms(
         "sigma".to_string(),
         vec![
             Term::Intercept,
@@ -56,7 +55,7 @@ fn main() -> Result<(), GamlssError> {
     );
 
     // Nu: Constant
-    formulas.insert("nu".to_string(), vec![Term::Intercept]);
+    formulas.add_terms("nu".to_string(), vec![Term::Intercept]);
 
     // Fit
     println!("Fitting GAMLSS model...");

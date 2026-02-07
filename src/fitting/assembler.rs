@@ -2,22 +2,20 @@ use super::{GamlssError, PenaltyMatrix, Smooth, Term};
 use crate::splines::{
     create_basis_matrix, create_penalty_matrix, kronecker_product, row_kronecker_into,
 };
+use crate::types::DataSet;
 use crate::ModelMatrix;
 use ndarray::concatenate;
 use ndarray::{s, Array1, Array2, Axis};
 use std::collections::HashMap;
 
-fn get_col<'a>(
-    data: &'a HashMap<String, Array1<f64>>,
-    name: &str,
-) -> Result<&'a Array1<f64>, GamlssError> {
+fn get_col<'a>(data: &'a DataSet, name: &str) -> Result<&'a Array1<f64>, GamlssError> {
     data.get(name).ok_or_else(|| GamlssError::MissingVariable {
         name: name.to_string(),
     })
 }
 
 fn assemble_smooth(
-    data: &HashMap<String, Array1<f64>>,
+    data: &DataSet,
     n_obs: usize,
     smooth: &Smooth,
 ) -> Result<(Array2<f64>, Vec<PenaltyMatrix>), GamlssError> {
@@ -118,7 +116,7 @@ fn assemble_smooth(
 /// * `Vec<PenaltyMatrix>` - Penalty matrices for each smooth term
 /// * `usize` - Total number of coefficients
 pub fn assemble_model_matrices(
-    data: &HashMap<String, Array1<f64>>,
+    data: &DataSet,
     n_obs: usize,
     terms: &[Term],
 ) -> Result<(ModelMatrix, Vec<PenaltyMatrix>, usize), GamlssError> {
