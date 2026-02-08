@@ -5,20 +5,25 @@ use crate::splines::{
 use crate::types::DataSet;
 use crate::ModelMatrix;
 use ndarray::concatenate;
-use ndarray::{s, Array1, Array2, Axis};
+use ndarray::{Array1, Array2, Axis};
 use std::collections::HashMap;
 
+/// Retrieves a named column from the dataset.
 fn get_col<'a>(data: &'a DataSet, name: &str) -> Result<&'a Array1<f64>, GamlssError> {
     data.get(name).ok_or_else(|| GamlssError::MissingVariable {
         name: name.to_string(),
     })
 }
 
+/// Assembles design matrix and penalty matrices for a smooth term.
+///
+/// Returns the basis function matrix and associated penalty matrices (can be multiple
+/// for tensor product terms).
 fn assemble_smooth(
     data: &DataSet,
     n_obs: usize,
     smooth: &Smooth,
-) -> Result<(Array2<f64>, Vec<PenaltyMatrix>), GamlssError> {
+) -> Result<(Array2<f64>, Vec<Array2<f64>>), GamlssError> {
     match smooth {
         Smooth::PSpline1D {
             col_name,
@@ -30,7 +35,7 @@ fn assemble_smooth(
             let basis = create_basis_matrix(x_col, *n_splines, *degree);
             let penalty = create_penalty_matrix(*n_splines, *penalty_order);
 
-            Ok((basis, vec![PenaltyMatrix(penalty)]))
+            Ok((basis, vec![penalty]))
         }
 
         Smooth::TensorProduct {
@@ -64,10 +69,7 @@ fn assemble_smooth(
 
             let penalty_1 = kronecker_product(&s1, &i_k2);
             let penalty_2 = kronecker_product(&i_k1, &s2);
-            Ok((
-                basis,
-                vec![PenaltyMatrix(penalty_1), PenaltyMatrix(penalty_2)],
-            ))
+            Ok((basis, vec![penalty_1, penalty_2]))
         }
 
         Smooth::RandomEffect { col_name } => {
@@ -100,7 +102,7 @@ fn assemble_smooth(
 
             let penalty = Array2::<f64>::eye(n_groups);
 
-            Ok((basis, vec![PenaltyMatrix(penalty)]))
+            Ok((basis, vec![penalty]))
         }
     }
 }
@@ -167,16 +169,7 @@ pub fn assemble_model_matrices(
 
     let penalty_matrices = penalty_blocks
         .into_iter()
-        .map(|(start_index, block)| {
-            let mut s_j = PenaltyMatrix(Array2::<f64>::zeros((total_coeffs, total_coeffs)));
-            let n = block.ncols();
-            s_j.slice_mut(s![
-                start_index..start_index + n,
-                start_index..start_index + n
-            ])
-            .assign(&block);
-            s_j
-        })
+        .map(|(start_index, block)| PenaltyMatrix::new(block, start_index, total_coeffs))
         .collect::<Vec<_>>();
 
     Ok((x_model, penalty_matrices, total_coeffs))
