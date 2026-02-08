@@ -32,7 +32,7 @@ pub struct GamlssModel {
 }
 
 impl GamlssModel {
-    pub fn fit<D: Distribution>(
+    pub fn fit<D: Distribution + ?Sized>(
         y: &Array1<f64>,
         data: &DataSet,
         formula: &Formula,
@@ -41,7 +41,7 @@ impl GamlssModel {
         Self::fit_with_config(y, data, formula, family, FitConfig::default())
     }
 
-    pub fn fit_with_config<D: Distribution>(
+    pub fn fit_with_config<D: Distribution + ?Sized>(
         y: &Array1<f64>,
         data: &DataSet,
         formula: &Formula,
