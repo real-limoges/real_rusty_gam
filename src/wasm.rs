@@ -29,8 +29,7 @@ fn get_distribution(name: &str) -> Result<Box<dyn Distribution>, GamlssError> {
 
 /// Expects a JSON array of numbers, e.g. `[1.0, 2.0, 3.0]`.
 fn parse_y_json(json: &str) -> Result<Array1<f64>, JsError> {
-    let values: Vec<f64> =
-        serde_json::from_str(json).map_err(|e| JsError::new(&e.to_string()))?;
+    let values: Vec<f64> = serde_json::from_str(json).map_err(|e| JsError::new(&e.to_string()))?;
     Ok(Array1::from_vec(values))
 }
 
