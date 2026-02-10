@@ -139,9 +139,19 @@ impl_argmin_math_for_vector_wrapper!(LogLambdas);
 #[derive(Debug, Clone)]
 pub struct ModelMatrix(pub Array2<f64>);
 
-/// Penalty matrix for a smooth term. Derefs to `Array2<f64>`.
+/// Block-sparse penalty matrix for a smooth term.
+///
+/// Stores only the nonzero b×b block and its position within the full p×p coefficient space,
+/// avoiding allocation of zero-padded dense matrices.
 #[derive(Debug, Clone)]
-pub struct PenaltyMatrix(pub Array2<f64>);
+pub struct PenaltyMatrix {
+    /// The nonzero b×b penalty block.
+    pub block: Array2<f64>,
+    /// Column/row offset of this block within the full coefficient vector.
+    pub offset: usize,
+    /// Total number of coefficients (full matrix dimension p).
+    pub full_dim: usize,
+}
 
 /// Covariance matrix of coefficient estimates, V = (X'WX + Σλ·S)⁻¹. Derefs to `Array2<f64>`.
 #[derive(Debug, Clone)]
@@ -166,8 +176,48 @@ macro_rules! impl_deref_for_matrix_wrapper {
 }
 
 impl_deref_for_matrix_wrapper!(CovarianceMatrix);
-impl_deref_for_matrix_wrapper!(PenaltyMatrix);
 impl_deref_for_matrix_wrapper!(ModelMatrix);
+
+impl PenaltyMatrix {
+    /// Creates a block-sparse penalty matrix from a b×b block and its position in the full space.
+    pub fn new(block: Array2<f64>, offset: usize, full_dim: usize) -> Self {
+        Self {
+            block,
+            offset,
+            full_dim,
+        }
+    }
+
+    /// Returns the block dimension (number of rows/columns).
+    pub fn block_dim(&self) -> usize {
+        self.block.nrows()
+    }
+
+    /// Adds λ·block into the correct slice of a p×p accumulator matrix.
+    ///
+    /// This efficiently handles the block-sparse structure by only modifying
+    /// the relevant [offset, offset+b] × [offset, offset+b] submatrix.
+    pub fn scaled_add_into(&self, lambda: f64, target: &mut Array2<f64>) {
+        let b = self.block_dim();
+        let off = self.offset;
+        let mut slice = target.slice_mut(ndarray::s![off..off + b, off..off + b]);
+        slice.scaled_add(lambda, &self.block);
+    }
+
+    /// Multiplies the penalty block by the relevant slice of a vector, returning zero-padded result.
+    ///
+    /// Computes `S * v[offset:offset+b]` and returns a p-length vector with
+    /// the result in positions [offset, offset+b] and zeros elsewhere.
+    pub fn dot_vec(&self, v: &Array1<f64>) -> Array1<f64> {
+        let b = self.block_dim();
+        let off = self.offset;
+        let v_slice = v.slice(ndarray::s![off..off + b]);
+        let product = self.block.dot(&v_slice);
+        let mut result = Array1::<f64>::zeros(self.full_dim);
+        result.slice_mut(ndarray::s![off..off + b]).assign(&product);
+        result
+    }
+}
 
 /// A dataset of named columns, wrapping `HashMap<String, Array1<f64>>`.
 #[derive(Debug, Clone, Default)]

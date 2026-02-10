@@ -105,15 +105,24 @@ impl<'a> Gradient for GamlssCost<'a> {
         let mut grad_vec = Array1::zeros(n_penalties);
 
         for j in 0..n_penalties {
-            let s_j = &self.penalty_matrices[j].0;
+            let s_j = &self.penalty_matrices[j];
 
             // dRSS/dlambda_j = 2 * (X'Wr)' * V * Sj * beta
-            let v_sj_beta = info.v_matrix.dot(&s_j.dot(&info.beta.0));
+            // Use block-sparse dot: S_j * beta only touches the relevant slice
+            let sj_beta = s_j.dot_vec(&info.beta.0);
+            let v_sj_beta = info.v_matrix.dot(&sj_beta);
             let d_rss = 2.0 * info.x_t_w_r.dot(&v_sj_beta);
 
             // dEDF/dlambda_j = -tr(V * Sj * V * X'WX)
-            let v_sj = info.v_matrix.dot(s_j);
-            let v_sj_v = v_sj.dot(&info.v_matrix);
+            // Exploit block structure: V * S_j only has nonzero cols in [off..off+b]
+            let b = s_j.block_dim();
+            let off = s_j.offset;
+            let v_cols = info.v_matrix.slice(s![.., off..off + b]);
+            let v_sj = v_cols.dot(&s_j.block);
+            // (V * S_j) has nonzero columns only in [off..off+b], so
+            // (V * S_j) * V = v_sj * V[off..off+b, ..]
+            let v_rows = info.v_matrix.slice(s![off..off + b, ..]);
+            let v_sj_v = v_sj.dot(&v_rows);
             let d_edf = -v_sj_v.dot(&info.x_t_w_x).diag().sum();
 
             // Quotient rule: dGCV/dlambda_j = n * [dRSS*(n-EDF) + 2*RSS*dEDF] / (n-EDF)^3
@@ -220,7 +229,7 @@ fn fit_pwls_with_grad_info(
 
     let mut s_lambda = Array2::<f64>::zeros((n_coeffs, n_coeffs));
     for (i, s_j) in penalty_matrices.iter().enumerate() {
-        s_lambda.scaled_add(lambdas[i], &s_j.0);
+        s_j.scaled_add_into(lambdas[i], &mut s_lambda);
     }
 
     // Use sqrt-weighted approach to avoid creating n×n diagonal matrix.
@@ -238,10 +247,7 @@ fn fit_pwls_with_grad_info(
 
     let lhs = &x_t_w_x + &s_lambda;
 
-    let beta_arr = linalg::solve(&lhs, &x_t_w_z)?;
-    let beta = Coefficients(beta_arr);
-
-    let v = linalg::inv(&lhs)?;
+    let (beta, v) = cholesky_solve_and_cov(&lhs, &x_t_w_z)?;
 
     // EDF (effective degrees of freedom) measures model complexity.
     // EDF = tr(H) where H = X(X'WX + sum lambda*S)^-1 X'W is the hat matrix.
@@ -263,4 +269,43 @@ fn fit_pwls_with_grad_info(
         x_t_w_r,
         rss,
     })
+}
+
+/// Solves the symmetric positive definite system and computes covariance matrix.
+///
+/// For a system A*x = b where A is SPD, first attempts Cholesky factorization A = L L^T:
+/// - Forward solve: L y = b
+/// - Back solve: L^T x = y
+/// - Covariance: V = A^{-1} = L^{-T} L^{-1}
+///
+/// Falls back to LU decomposition if the matrix is not SPD (useful for numerically
+/// near-singular cases).
+///
+/// # Returns
+/// * Coefficient vector beta and covariance matrix V = A^{-1}
+///
+/// # Errors
+/// Returns an error if both Cholesky and LU decompositions fail.
+fn cholesky_solve_and_cov(
+    lhs: &Array2<f64>,
+    rhs: &Array1<f64>,
+) -> Result<(Coefficients, Array2<f64>), GamlssError> {
+    match linalg::cholesky_lower(lhs) {
+        Ok(l) => {
+            let y = linalg::solve_triangular_lower(&l, rhs)?;
+            let lt = l.t().to_owned();
+            let beta = Coefficients(linalg::solve_triangular_upper(&lt, &y)?);
+
+            let l_inv = linalg::inv_lower_triangular(&l)?;
+            let v = l_inv.t().dot(&l_inv);
+
+            Ok((beta, v))
+        }
+        Err(_) => {
+            // Fallback to LU for near-singular or non-SPD cases
+            let beta = Coefficients(linalg::solve(lhs, rhs)?);
+            let v = linalg::inv(lhs)?;
+            Ok((beta, v))
+        }
+    }
 }

@@ -12,6 +12,8 @@ GAMLSS extends traditional regression by modeling not just the mean, but also va
 - **Dual backends**: OpenBLAS (default, max performance) or pure Rust via faer (no system deps)
 - **WASM support**: Fit models and predict directly in the browser via wasm-bindgen
 - **Type-safe API**: `DataSet`, `Formula`, and newtype wrappers prevent misuse
+- **Optimized numerics**: Cholesky-based PWLS solver and block-sparse penalty matrices
+- **R-validated**: 10 test fixtures comparing against R's gamlss package across all distributions
 
 ## Installation
 
@@ -506,6 +508,7 @@ This repository is a Cargo workspace:
 
 - **`gamlss_rs`** (root) — the core library
 - **`benchmark/`** (`gamlss_benchmark`) — comparison framework against R/mgcv
+- **`tests/fixtures/`** — R-generated validation fixtures (JSON format)
 
 ## Algorithm
 
@@ -513,8 +516,8 @@ GAMLSS fitting uses a penalized quasi-likelihood approach (Rigby-Stasinopoulos a
 
 1. **Initialization**: Set starting values for all distribution parameters
 2. **Outer loop**: Cycle through distribution parameters
-3. **Inner loop**: For each parameter, compute working response and weights from derivatives, then fit a penalized weighted least squares model
-4. **Smoothing selection**: Optimize smoothing parameters via GCV using L-BFGS
+3. **Inner loop**: For each parameter, compute working response and weights from derivatives, then fit a penalized weighted least squares model using Cholesky decomposition (falls back to LU if non-positive-definite)
+4. **Smoothing selection**: Optimize smoothing parameters via GCV using L-BFGS (exploits block-sparse penalty structure)
 5. **Convergence**: Check if coefficient changes are below tolerance
 
 ## Performance
@@ -525,6 +528,27 @@ The library includes several optimizations for large datasets:
 - **Parallel computation**: Special functions (digamma, trigamma) use Rayon parallel iterators for n >= 10,000
 - **Warm-starting**: L-BFGS optimization reuses previous smoothing parameters for faster convergence
 - **Efficient matrix operations**: Uses sqrt-weighted approach to avoid O(n²) memory allocation
+- **Cholesky solver**: 2× faster than LU decomposition for symmetric positive-definite systems
+- **Block-sparse penalties**: Only stores nonzero blocks of penalty matrices, eliminating zero-padded allocations
+
+## Testing & Validation
+
+The library includes 88 tests (13 unit + 66 integration + 9 R validation) that pass on both OpenBLAS and pure-rust (faer) backends.
+
+### R Validation Fixtures
+
+Ten JSON test fixtures in `tests/fixtures/` provide cross-validation against R's gamlss package. These fixtures cover all major distributions (Gaussian, Poisson, Gamma, NegativeBinomial, StudentT, Beta) in both linear and smooth scenarios.
+
+**Validation metrics**:
+- **Linear models**: Fitted value correlation > 0.999, coefficient relative error < 5%, EDF difference < 1.0
+- **Smooth models**: Fitted value correlation > 0.99, EDF difference < 5.0
+
+**Generating fixtures** (requires R + gamlss package):
+```bash
+Rscript tests/fixtures/generate_fixtures.R
+```
+
+The 9 validation tests in `tests/r_validation.rs` run automatically during `cargo test` using the committed fixtures. No R installation is required for CI.
 
 ## Benchmark (Comparison with R)
 
