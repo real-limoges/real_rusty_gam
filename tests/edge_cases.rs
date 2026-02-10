@@ -50,7 +50,7 @@ fn test_poisson_with_smooth() {
         })],
     );
 
-    let model = GamlssModel::fit(&y, &data, &formula, &Poisson::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &Poisson::new()).unwrap();
 
     let edf = model.models["mu"].edf;
     assert!(edf > 2.0, "EDF too low for nonlinear Poisson: {}", edf);
@@ -89,7 +89,7 @@ fn test_student_t_linear() {
     formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
     formula.add_terms("nu".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&y, &data, &formula, &StudentT::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &StudentT::new()).unwrap();
 
     let mu_coeffs = &model.models["mu"].coefficients;
     assert!(
@@ -122,7 +122,7 @@ fn test_different_spline_configs() {
         );
         formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
-        let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new());
+        let model = GamlssModel::fit(&data, &y, &formula, &Gaussian::new());
         assert!(model.is_ok(), "Failed with n_splines={}", n_splines);
     }
 }
@@ -170,8 +170,8 @@ fn test_penalty_order_1_vs_2() {
     );
     formula2.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
-    let model1 = GamlssModel::fit(&y, &data, &formula1, &Gaussian::new()).unwrap();
-    let model2 = GamlssModel::fit(&y, &data, &formula2, &Gaussian::new()).unwrap();
+    let model1 = GamlssModel::fit(&data, &y, &formula1, &Gaussian::new()).unwrap();
+    let model2 = GamlssModel::fit(&data, &y, &formula2, &Gaussian::new()).unwrap();
 
     assert!(model1.models["mu"].edf > 2.0);
     assert!(model2.models["mu"].edf > 2.0);
@@ -207,7 +207,7 @@ fn test_very_noisy_data() {
     );
     formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &Gaussian::new()).unwrap();
 
     // Should still recover approximate slope despite noise
     let slope = model.models["mu"].coefficients[1];
@@ -240,7 +240,7 @@ fn test_perfect_linear_fit() {
     );
     formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &Gaussian::new()).unwrap();
 
     let coeffs = &model.models["mu"].coefficients;
     assert!(
@@ -272,7 +272,7 @@ fn test_lambdas_positive() {
     );
     formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &Gaussian::new()).unwrap();
 
     // Smoothing parameters should be positive
     for &lambda in model.models["mu"].lambdas.iter() {
@@ -297,7 +297,7 @@ fn test_covariance_symmetric() {
     );
     formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &Gaussian::new()).unwrap();
 
     let cov = &model.models["mu"].covariance.0;
     let (n, m) = cov.dim();
@@ -329,7 +329,7 @@ fn test_fitted_values_match_eta_transform() {
     );
     formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &Gaussian::new()).unwrap();
 
     // For Gaussian with identity link, fitted_values should equal eta
     let mu = &model.models["mu"];
@@ -365,7 +365,7 @@ fn test_random_effect_basic() {
     );
     formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &Gaussian::new()).unwrap();
 
     assert_eq!(
         model.models["mu"].coefficients.len(),
@@ -416,7 +416,7 @@ fn test_wide_data_more_predictors() {
     );
     formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&y, &data, &formula, &Gaussian::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &Gaussian::new()).unwrap();
 
     let coeffs = &model.models["mu"].coefficients;
     assert_eq!(coeffs.len(), 5, "Should have 5 coefficients");
@@ -469,7 +469,7 @@ fn test_poisson_multiple_predictors() {
         ],
     );
 
-    let model = GamlssModel::fit(&y, &data, &formula, &Poisson::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &Poisson::new()).unwrap();
 
     let coeffs = &model.models["mu"].coefficients;
     assert!(
@@ -522,7 +522,7 @@ fn test_poisson_high_rate() {
         ],
     );
 
-    let model = GamlssModel::fit(&y, &data, &formula, &Poisson::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &Poisson::new()).unwrap();
 
     let coeffs = &model.models["mu"].coefficients;
     assert!(
@@ -572,7 +572,7 @@ fn test_poisson_smooth_nonlinear() {
         })],
     );
 
-    let model = GamlssModel::fit(&y, &data, &formula, &Poisson::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &Poisson::new()).unwrap();
 
     let edf = model.models["mu"].edf;
     // Should capture some curvature but not overfit
@@ -617,7 +617,7 @@ fn test_poisson_low_counts() {
         ],
     );
 
-    let model = GamlssModel::fit(&y, &data, &formula, &Poisson::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &Poisson::new()).unwrap();
 
     let coeffs = &model.models["mu"].coefficients;
     // Lower precision for low-count data
@@ -676,7 +676,7 @@ fn test_student_t_smooth_mu() {
     formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
     formula.add_terms("nu".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&y, &data, &formula, &StudentT::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &StudentT::new()).unwrap();
 
     let edf = model.models["mu"].edf;
     assert!(
@@ -735,7 +735,7 @@ fn test_student_t_heteroskedastic() {
     );
     formula.add_terms("nu".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&y, &data, &formula, &StudentT::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &StudentT::new()).unwrap();
 
     let mu_coeffs = &model.models["mu"].coefficients;
     let sigma_coeffs = &model.models["sigma"].coefficients;
@@ -803,7 +803,7 @@ fn test_student_t_heavy_tails() {
     formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
     formula.add_terms("nu".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&y, &data, &formula, &StudentT::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &StudentT::new()).unwrap();
 
     let nu_coeff = model.models["nu"].coefficients[0];
     let fitted_nu = nu_coeff.exp();
@@ -868,7 +868,7 @@ fn test_student_t_multiple_predictors() {
     formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
     formula.add_terms("nu".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&y, &data, &formula, &StudentT::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &StudentT::new()).unwrap();
 
     let coeffs = &model.models["mu"].coefficients;
     assert!(
@@ -932,7 +932,7 @@ fn test_student_t_near_gaussian() {
     formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
     formula.add_terms("nu".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&y, &data, &formula, &StudentT::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &StudentT::new()).unwrap();
 
     let mu_coeffs = &model.models["mu"].coefficients;
 
@@ -1002,7 +1002,7 @@ fn test_gamma_linear_mu() {
     );
     formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&y, &data, &formula, &Gamma::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &Gamma::new()).unwrap();
 
     let mu_coeffs = &model.models["mu"].coefficients;
     // Coefficients are on log scale due to log link
@@ -1066,7 +1066,7 @@ fn test_gamma_heteroscedastic() {
         ],
     );
 
-    let model = GamlssModel::fit(&y, &data, &formula, &Gamma::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &Gamma::new()).unwrap();
 
     let mu_coeffs = &model.models["mu"].coefficients;
     let sigma_coeffs = &model.models["sigma"].coefficients;
@@ -1133,7 +1133,7 @@ fn test_gamma_smooth_mu() {
     );
     formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&y, &data, &formula, &Gamma::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &Gamma::new()).unwrap();
 
     let edf = model.models["mu"].edf;
     assert!(
@@ -1183,7 +1183,7 @@ fn test_negative_binomial_linear() {
     );
     formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&y, &data, &formula, &NegativeBinomial::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &NegativeBinomial::new()).unwrap();
 
     let mu_coeffs = &model.models["mu"].coefficients;
     assert!(
@@ -1233,7 +1233,7 @@ fn test_negative_binomial_overdispersed() {
     );
     formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&y, &data, &formula, &NegativeBinomial::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &NegativeBinomial::new()).unwrap();
 
     let mu_coeffs = &model.models["mu"].coefficients;
     assert!(
@@ -1294,7 +1294,7 @@ fn test_negative_binomial_smooth() {
     );
     formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&y, &data, &formula, &NegativeBinomial::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &NegativeBinomial::new()).unwrap();
 
     let edf = model.models["mu"].edf;
     assert!(
@@ -1344,7 +1344,7 @@ fn test_negative_binomial_multiple_predictors() {
     );
     formula.add_terms("sigma".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&y, &data, &formula, &NegativeBinomial::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &NegativeBinomial::new()).unwrap();
 
     let mu_coeffs = &model.models["mu"].coefficients;
     assert!(
@@ -1412,7 +1412,7 @@ fn test_beta_linear_mu() {
     );
     formula.add_terms("phi".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&y, &data, &formula, &Beta::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &Beta::new()).unwrap();
 
     let mu_coeffs = &model.models["mu"].coefficients;
     // Coefficients are on logit scale
@@ -1467,7 +1467,7 @@ fn test_beta_varying_precision() {
         ],
     );
 
-    let model = GamlssModel::fit(&y, &data, &formula, &Beta::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &Beta::new()).unwrap();
 
     let phi_coeffs = &model.models["phi"].coefficients;
     assert!(
@@ -1522,7 +1522,7 @@ fn test_beta_smooth_mu() {
     );
     formula.add_terms("phi".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&y, &data, &formula, &Beta::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &Beta::new()).unwrap();
 
     let edf = model.models["mu"].edf;
     assert!(edf > 2.0, "Beta smooth mu EDF too low: {}", edf);
@@ -1567,7 +1567,7 @@ fn test_beta_high_precision() {
     );
     formula.add_terms("phi".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&y, &data, &formula, &Beta::new()).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &Beta::new()).unwrap();
 
     let mu_coeffs = &model.models["mu"].coefficients;
     assert!(
@@ -1630,7 +1630,7 @@ fn test_binomial_linear() {
         ],
     );
 
-    let model = GamlssModel::fit(&y, &data, &formula, &Binomial::new(n_trials)).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &Binomial::new(n_trials)).unwrap();
 
     let mu_coeffs = &model.models["mu"].coefficients;
     assert!(
@@ -1669,7 +1669,7 @@ fn test_binomial_high_probability() {
     let mut formula = Formula::new();
     formula.add_terms("mu".to_string(), vec![Term::Intercept]);
 
-    let model = GamlssModel::fit(&y, &data, &formula, &Binomial::new(n_trials)).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &Binomial::new(n_trials)).unwrap();
 
     // Check fitted probability is close to true value
     let mu_coeff = model.models["mu"].coefficients[0];
@@ -1723,7 +1723,7 @@ fn test_binomial_multiple_predictors() {
         ],
     );
 
-    let model = GamlssModel::fit(&y, &data, &formula, &Binomial::new(n_trials)).unwrap();
+    let model = GamlssModel::fit(&data, &y, &formula, &Binomial::new(n_trials)).unwrap();
 
     let mu_coeffs = &model.models["mu"].coefficients;
     assert_eq!(mu_coeffs.0.len(), 3, "Should have 3 coefficients");
