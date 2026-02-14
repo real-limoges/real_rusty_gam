@@ -30,13 +30,13 @@ pub mod fitting;
 mod linalg;
 mod math;
 pub mod preprocessing;
+#[cfg(feature = "python")]
+mod python;
 mod splines;
 mod terms;
 mod types;
 #[cfg(feature = "wasm")]
 pub mod wasm;
-#[cfg(feature = "python")]
-mod python;
 
 pub use diagnostics::ModelDiagnostics;
 pub use error::GamlssError;
