@@ -20,7 +20,7 @@
 //!     .with_terms("mu", vec![Term::Intercept, Term::Linear { col_name: "x".to_string() }])
 //!     .with_terms("sigma", vec![Term::Intercept]);
 //!
-//! let model = GamlssModel::fit( &data,&y, &formula, &Gaussian::new()).unwrap();
+//! let model = GamlssModel::fit(&data, &y, &formula, &Gaussian::new()).unwrap();
 //! ```
 
 pub mod diagnostics;
